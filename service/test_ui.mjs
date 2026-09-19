@@ -16,7 +16,9 @@ assert.match(html, /매일[\s\S]*평일 전체[\s\S]*주말 전체[\s\S]*지정 
 assert.match(html, /id="mode-auto"[^>]*checked/);
 assert.doesNotMatch(html, /id="mode-manual"[^>]*checked/);
 assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: fixed/);
-assert.match(html, /학교 신청내역[\s\S]*확인 필요[\s\S]*제외·미처리/);
+assert.match(html, /\.control-panel \{ order: 1; \}[\s\S]*\.calendar-panel \{ order: 2; \}/);
+assert.match(html, /학교 신청내역[\s\S]*data-result="saved" hidden[\s\S]*data-result="unknown" hidden[\s\S]*data-result="exists overlap not_attempted" hidden/);
+assert.match(html, /#login-status\[data-kind="error"\]/);
 assert.match(html, /id="reconcile-job"[\s\S]*자동 선택[\s\S]*달력 직접 선택/);
 assert.match(html, /id="holiday-meta"[\s\S]*공휴일을 제외한/);
 assert.doesNotMatch(html, /최근 신청 결과|history-list|history-item/);
@@ -33,6 +35,11 @@ assert.match(script, /pattern === "weekends"[\s\S]*day === 5/);
 assert.match(script, /pattern === "weekdays"[\s\S]*!holidayFor\(value\)/);
 assert.match(script, /addDays\(state\.today, state\.maxSelectionDays - 1\)/);
 assert.match(script, /preview\.periods\.length/);
+assert.match(script, /function moveMonth\(offset\)[\s\S]*month < state\.today\.slice\(0, 7\)[\s\S]*month > maxSelectableDate\(\)\.slice\(0, 7\)/);
+assert.match(script, /prevMonthButton\.disabled = viewMonth === state\.today\.slice\(0, 7\)/);
+assert.match(script, /nextMonthButton\.disabled = viewMonth === maxSelectableDate\(\)\.slice\(0, 7\)/);
+assert.match(script, /if \(!loadError\) show\(""\)/);
+assert.match(script, /showLogin\(error\.message, "error"\)/);
 assert.doesNotMatch(script, /innerHTML|eval\(/);
 
 const syntax = spawnSync(process.execPath, ["--check", fileURLToPath(scriptUrl)], { encoding: "utf8" });

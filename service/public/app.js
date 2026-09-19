@@ -2,6 +2,7 @@ const loginSection = document.querySelector("#login-section");
 const appSection = document.querySelector("#app-section");
 const loginForm = document.querySelector("#login-form");
 const requestForm = document.querySelector("#request-form");
+const loginButton = loginForm.querySelector('button[type="submit"]');
 const loginStatus = document.querySelector("#login-status");
 const status = document.querySelector("#status");
 const calendarGrid = document.querySelector("#calendar-grid");
@@ -22,6 +23,7 @@ const reconcileButton = document.querySelector("#reconcile-job");
 const holidayMeta = document.querySelector("#holiday-meta");
 const logoutButton = document.querySelector("#logout");
 const deleteButton = document.querySelector("#delete-account");
+const resultLegends = document.querySelectorAll("[data-result]");
 
 const state = {
   today: "",
@@ -55,8 +57,9 @@ function show(message, kind = "") {
   status.dataset.kind = kind;
 }
 
-function showLogin(message = "") {
+function showLogin(message = "", kind = "") {
   loginStatus.textContent = message;
+  loginStatus.dataset.kind = kind;
 }
 
 function compactToIso(value) {
@@ -130,6 +133,7 @@ function credentialBody(value = {}) {
 
 function setBusy(busy) {
   actionBusy = busy;
+  loginButton.textContent = busy && !loginSection.hidden ? "로그인 중…" : "로그인";
   updateControls();
 }
 
@@ -174,6 +178,7 @@ function renderCalendar() {
   if (!state.today) return;
   const selected = new Set(activeDates());
   const marks = jobMarks();
+  const markStatuses = new Set(marks.values());
   const first = new Date(Date.UTC(state.viewYear, state.viewMonth, 1));
   const startOffset = first.getUTCDay();
   const daysInMonth = new Date(Date.UTC(state.viewYear, state.viewMonth + 1, 0)).getUTCDate();
@@ -184,6 +189,12 @@ function renderCalendar() {
     ? `공휴일 · ${monthHolidays.map(item => `${Number(item.date.slice(8))}일 ${item.name}`).join(" · ")}`
     : "";
   holidayMeta.hidden = monthHolidays.length === 0;
+  for (const legend of resultLegends) {
+    legend.hidden = !legend.dataset.result.split(" ").some(result => markStatuses.has(result));
+  }
+  const viewMonth = `${state.viewYear}-${String(state.viewMonth + 1).padStart(2, "0")}`;
+  prevMonthButton.disabled = viewMonth === state.today.slice(0, 7);
+  nextMonthButton.disabled = viewMonth === maxSelectableDate().slice(0, 7);
   calendarGrid.replaceChildren();
 
   for (let index = 0; index < 42; index++) {
@@ -410,7 +421,7 @@ async function loadDashboard(initial = {}) {
     await refreshJob(requestedJobId || running.id);
   } else {
     updateControls();
-    if (!loadError) show("달력에서 날짜를 선택하거나 자동 선택을 이용하세요.");
+    if (!loadError) show("");
   }
 }
 
@@ -434,7 +445,7 @@ loginForm.addEventListener("submit", async event => {
     setConnected(true);
     await loadDashboard(session);
   } catch (error) {
-    showLogin(error.message);
+    showLogin(error.message, "error");
   } finally { setBusy(false); }
 });
 
@@ -455,14 +466,17 @@ requestForm.addEventListener("submit", async event => {
   finally { setBusy(false); }
 });
 
-prevMonthButton.addEventListener("click", () => {
-  if (--state.viewMonth < 0) { state.viewMonth = 11; state.viewYear--; }
+function moveMonth(offset) {
+  const candidate = new Date(Date.UTC(state.viewYear, state.viewMonth + offset, 1));
+  const month = isoAt(candidate).slice(0, 7);
+  if (month < state.today.slice(0, 7) || month > maxSelectableDate().slice(0, 7)) return;
+  state.viewYear = candidate.getUTCFullYear();
+  state.viewMonth = candidate.getUTCMonth();
   renderCalendar();
-});
-nextMonthButton.addEventListener("click", () => {
-  if (++state.viewMonth > 11) { state.viewMonth = 0; state.viewYear++; }
-  renderCalendar();
-});
+}
+
+prevMonthButton.addEventListener("click", () => moveMonth(-1));
+nextMonthButton.addEventListener("click", () => moveMonth(1));
 todayMonthButton.addEventListener("click", () => {
   const today = dateAt(state.today);
   state.viewYear = today.getUTCFullYear();
@@ -535,8 +549,9 @@ try {
   configureSession(session);
   setConnected(session.connected);
   if (session.connected) await loadDashboard();
-  else showLogin(claimError?.message || "학교 포털 계정으로 로그인해 주세요.");
+  else if (claimError) showLogin(claimError.message, "error");
+  else showLogin("학교 포털 계정으로 로그인해 주세요.");
 } catch (error) {
   setConnected(false);
-  showLogin(error.message);
+  showLogin(error.message, "error");
 }
