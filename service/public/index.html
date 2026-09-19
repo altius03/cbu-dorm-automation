@@ -51,9 +51,10 @@
       #login-status { margin: 16px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
       #login-status:empty { display: none; }
       #login-status[data-kind="error"] { color: var(--red); }
-      .club-link { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding: 12px 14px; border-radius: 11px; color: #344054; background: var(--soft); font-size: 12px; font-weight: 700; text-decoration: none; }
+      .club-link { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding: 10px 2px; color: #344054; font-size: 12px; font-weight: 700; text-decoration: none; }
       .club-link svg { width: 19px; height: 19px; color: #c13584; flex: none; }
-      .club-link:hover { background: #edf0f6; }
+      .club-link:hover { color: #111827; }
+      .external-arrow { margin-left: 2px; font-size: 13px; }
       .app-shell { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 26px 0 60px; }
       .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
       .app-header .brand { margin: 0; color: var(--ink); font-size: 18px; letter-spacing: -.02em; }
@@ -200,7 +201,7 @@
               <circle cx="12" cy="12" r="4" />
               <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
             </svg>
-            <span>한국공학대 개발동아리 CBU</span>
+            <span>한국공학대 개발동아리 CBU <span class="external-arrow" aria-hidden="true">↗</span></span>
           </a>
         </div>
       </section>

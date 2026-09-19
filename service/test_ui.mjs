@@ -18,7 +18,8 @@ assert.match(html, /<symbol id="cbu-owl" viewBox="0 0 64 64">[\s\S]*#93c96f[\s\S
 assert.match(html, /<strong>외박신청<\/strong><small>by cbu<\/small>/);
 assert.match(html, /.login-brand strong \{ font-size: 20px; \}/);
 assert.match(html, /<label for="student-id">포털 아이디<\/label>/);
-assert.match(html, /class="club-link" href="https:\/\/www\.instagram\.com\/tukorea_cbu\/"[\s\S]*한국공학대 개발동아리 CBU/);
+assert.match(html, /class="club-link" href="https:\/\/www\.instagram\.com\/tukorea_cbu\/"[\s\S]*한국공학대 개발동아리 CBU[\s\S]*class="external-arrow"[\s\S]*↗/);
+assert.doesNotMatch(html, /\.club-link \{[^}]*background:/);
 assert.doesNotMatch(html, /날짜만 고르면 신청은 자동으로|비밀번호는 저장하지 않아요|학교 로그인에만 사용해요|씨부엉이 만들었어요|한국공학대학교 개발동아리/);
 assert.doesNotMatch(html, /TUK DORM|외박신청 로그인/);
 assert.match(html, /id="calendar-grid" role="grid"/);
