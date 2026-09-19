@@ -237,7 +237,8 @@ export function createApplication({
 
   async function route(request, response, phases) {
     const url = new URL(request.url, "http://localhost");
-    const origin = guard(request);
+    const holidayCron = request.method === "GET" && url.pathname === "/api/cron/holidays";
+    const origin = holidayCron ? "" : guard(request);
     if (stopping && request.method !== "GET") throw new HttpError(503, "서버가 재시작 중입니다. 잠시 후 다시 시도해 주세요.");
     if (request.method === "GET" && ["/", "/app.js"].includes(url.pathname)) {
       const body = url.pathname === "/" ? page : script;
@@ -249,7 +250,7 @@ export function createApplication({
       await measure(phases, "databaseMs", () => store.health ? store.health() : store.database.prepare("SELECT 1").get());
       return sendJson(response, 200, { ok: true });
     }
-    if (request.method === "GET" && url.pathname === "/api/cron/holidays") {
+    if (holidayCron) {
       const supplied = Buffer.from(String(request.headers.authorization || ""));
       const expected = Buffer.from(`Bearer ${cronSecret}`);
       if (!holidaySync || !cronSecret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {

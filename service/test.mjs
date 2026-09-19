@@ -146,7 +146,10 @@ try {
     holidaySync: async () => ({ count: ++holidayRuns, years: [2026, 2027] }),
   });
   assert.equal((await call(cron, "/api/cron/holidays", { method: "GET" })).statusCode, 401);
-  const synced = await call(cron, "/api/cron/holidays", { method: "GET", headers: { authorization: `Bearer ${"fixture-cron-secret-".repeat(2)}` } });
+  const synced = await call(cron, "/api/cron/holidays", {
+    method: "GET", socket: {},
+    headers: { host: "generated-deployment.vercel.app", authorization: `Bearer ${"fixture-cron-secret-".repeat(2)}` },
+  });
   assert.equal(synced.statusCode, 200);
   assert.equal(synced.body.count, 1);
   const proxied = createApplication({ ...appOptions, publicOrigin: "https://overnight.example" });
