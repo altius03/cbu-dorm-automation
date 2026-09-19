@@ -10,7 +10,7 @@ import { HttpError } from "./errors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sessionCookieName = "overnight_session";
-const mascotRoute = "/assets/cbu-sleeping-owl-v1.png";
+const mascotRoute = "/assets/cbu-sleeping-owl-v2.png";
 const knownRoutes = new Set([
   "/", "/app.js", mascotRoute, "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect", "/api/claim",
   "/api/logout", "/api/account", "/api/applications", "/api/check", "/api/apply", "/api/batch/job",
@@ -241,7 +241,7 @@ export function createApplication({
       return;
     }
     if (request.method === "GET" && url.pathname === mascotRoute) {
-      const body = readFileSync(join(here, "public", "assets", "cbu-sleeping-owl-v1.png"));
+      const body = readFileSync(join(here, "public", "assets", "cbu-sleeping-owl-v2.png"));
       response.writeHead(200, { "Content-Type": "image/png", "Content-Length": body.length, "Cache-Control": "public, max-age=31536000, immutable" });
       response.end(body);
       return;

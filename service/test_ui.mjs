@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const htmlUrl = new URL("./public/index.html", import.meta.url);
 const scriptUrl = new URL("./public/app.js", import.meta.url);
-const mascotUrl = new URL("./public/assets/cbu-sleeping-owl-v1.png", import.meta.url);
+const mascotUrl = new URL("./public/assets/cbu-sleeping-owl-v2.png", import.meta.url);
 const html = readFileSync(htmlUrl, "utf8");
 const script = readFileSync(scriptUrl, "utf8");
 const mascot = readFileSync(mascotUrl);
@@ -13,7 +13,7 @@ const mascot = readFileSync(mascotUrl);
 assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
 assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
-assert.equal(html.match(/src="\/assets\/cbu-sleeping-owl-v1\.png"/g)?.length, 2);
+assert.equal(html.match(/src="\/assets\/cbu-sleeping-owl-v2\.png"/g)?.length, 2);
 assert.match(html, /<header class="app-header">[\s\S]*class="club-mark"[\s\S]*외박신청<small>by cbu<\/small>/);
 assert.doesNotMatch(html, /brand-mark|<span class="brand-mark">T<\/span>/);
 assert.equal(mascot.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
