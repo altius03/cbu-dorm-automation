@@ -1,4 +1,17 @@
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+export const MAX_BATCH_DATES = 370;
+
+// 학교 모집 공지의 지정 입주기간. 다음 학기 공지가 나오면 이 표만 갱신한다.
+const RESIDENCY_SCHEDULES = [
+  {
+    from: "2026-02-27", through: "2026-08-28", term: "2026-1",
+    ends: { semester: "2026-06-23", sixMonths: "2026-08-15", twelveMonths: "2027-02-13" },
+  },
+  {
+    from: "2026-08-29", through: "2027-02-13", term: "2026-2",
+    ends: { semester: "2026-12-23", sixMonths: "2027-02-13", twelveMonths: "2027-02-13" },
+  },
+];
 
 export function parseIsoDate(value) {
   const match = typeof value === "string" && ISO_DATE.exec(value);
@@ -80,8 +93,31 @@ function weekends(dates) {
   return dates.filter(value => [0, 6].includes(new Date(`${value}T00:00:00Z`).getUTCDay()));
 }
 
-export function buildBatchDates({ kind }, todayValue = localIsoDate()) {
+export function residencyHorizons(todayValue = localIsoDate()) {
+  parseIsoDate(todayValue);
+  const schedule = RESIDENCY_SCHEDULES.find(item => item.from <= todayValue && todayValue <= item.through);
+  if (!schedule) return [];
+  return [
+    { id: "semester", label: "학기 퇴관", end: schedule.ends.semester },
+    { id: "sixMonths", label: "6개월 퇴관", end: schedule.ends.sixMonths },
+    { id: "twelveMonths", label: "12개월 퇴관", end: schedule.ends.twelveMonths },
+  ].map(item => ({ ...item, term: schedule.term, available: item.end >= todayValue }));
+}
+
+export function buildBatchDates(body, todayValue = localIsoDate()) {
   const today = parseIsoDate(todayValue);
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("신청 방식을 선택하세요.");
+
+  if (body.dates !== undefined) {
+    if (!Array.isArray(body.dates) || !body.dates.length || body.dates.length > MAX_BATCH_DATES) {
+      throw new Error("선택한 날짜를 확인해 주세요.");
+    }
+    const dates = body.dates.map(value => parseIsoDate(value).iso).sort();
+    if (new Set(dates).size !== dates.length) throw new Error("중복된 날짜를 선택할 수 없습니다.");
+    return dates;
+  }
+
+  const { kind } = body;
   let count;
 
   if (kind === "daily-month") count = 30;
@@ -94,8 +130,27 @@ export function buildBatchDates({ kind }, todayValue = localIsoDate()) {
     const end = Date.UTC(date.getUTCFullYear(), endMonth, 0) / 86400000;
     count = end - today.epochDay + 1;
   }
-  if (!count) throw new Error("일괄신청 방식을 선택하세요.");
+  if (count) {
+    const dates = datesFrom(today.epochDay, count);
+    return kind === "daily-month" ? dates : weekends(dates);
+  }
 
-  const dates = datesFrom(today.epochDay, count);
-  return kind === "daily-month" ? dates : weekends(dates);
+  const horizon = residencyHorizons(todayValue).find(item => item.id === body.range && item.available);
+  if (!horizon) throw new Error("선택한 입주기간의 퇴관일이 아직 공지되지 않았습니다.");
+  const end = parseIsoDate(horizon.end);
+  const dates = datesFrom(today.epochDay, end.epochDay - today.epochDay + 1);
+  if (body.pattern === "daily") return dates;
+  if (body.pattern === "weekdays") return dates.filter(value => {
+    const day = new Date(`${value}T00:00:00Z`).getUTCDay();
+    return day >= 1 && day <= 5;
+  });
+  if (body.pattern === "weekends") return weekends(dates);
+  if (body.pattern === "custom") {
+    if (!Array.isArray(body.weekdays) || !body.weekdays.length || body.weekdays.some(day => !Number.isInteger(day) || day < 0 || day > 6)) {
+      throw new Error("신청할 요일을 선택하세요.");
+    }
+    const weekdays = new Set(body.weekdays);
+    return dates.filter(value => weekdays.has(new Date(`${value}T00:00:00Z`).getUTCDay()));
+  }
+  throw new Error("신청 패턴을 선택하세요.");
 }

@@ -4,7 +4,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { buildBatchDates, localIsoDate, parseIsoDate, validatePeriod } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, buildBatchDates, localIsoDate, parseIsoDate, residencyHorizons, validatePeriod } from "../extension/core.mjs";
 import { PortalError, TukoreaPortal } from "./portal.mjs";
 import { HttpError } from "./errors.mjs";
 
@@ -63,7 +63,7 @@ export function batchDatesFrom(body, now = koreaNow()) {
       try { validatePeriod(value, value, now); return true; }
       catch { return false; }
     });
-    if (!dates.length || dates.length > 70) throw new Error("신청 가능한 날짜가 없습니다. 다른 방식을 선택해 주세요.");
+    if (!dates.length || dates.length > MAX_BATCH_DATES) throw new Error("신청 가능한 날짜가 없습니다. 다른 방식을 선택해 주세요.");
     return dates;
   } catch (error) { throw new HttpError(400, error.message); }
 }
@@ -93,7 +93,7 @@ export function createApplication({
   const profileFrom = (request, credentials = false) => store.find(cookieValue(request), { credentials, now: now().getTime() });
   const requireProfile = async (request, credentials = false) => {
     const profile = await profileFrom(request, credentials);
-    if (!profile) throw new HttpError(401, "계정을 먼저 연결해 주세요.");
+    if (!profile) throw new HttpError(401, "학교 포털에 먼저 로그인해 주세요.");
     return profile;
   };
   const accountKey = profile => createHash("sha256").update(profile.credentials.studentId.toLowerCase()).digest("hex");
@@ -196,11 +196,12 @@ export function createApplication({
       else store.database.prepare("SELECT 1").get();
       return sendJson(response, 200, { ok: true });
     }
-    await limit(request, ["/api/register", "/api/reconnect", "/api/claim"].includes(url.pathname));
+    await limit(request, ["/api/login", "/api/register", "/api/reconnect", "/api/claim"].includes(url.pathname));
     if (request.method === "GET" && url.pathname === "/api/session") {
       const profile = await profileFrom(request);
       return sendJson(response, 200, {
         connected: Boolean(profile), today: localIsoDate(koreaNow(now())),
+        horizons: residencyHorizons(localIsoDate(koreaNow(now()))),
         ...(profile ? { createdAt: profile.createdAt } : {}),
       });
     }
@@ -231,6 +232,27 @@ export function createApplication({
       if (!profile) throw new HttpError(403, "이 계정 연결 링크는 유효하지 않거나 이미 사용되었습니다.");
       response.setHeader("Set-Cookie", cookie(profile.token));
       return sendJson(response, 200, { connected: true });
+    }
+    if (request.method === "POST" && url.pathname === "/api/login") {
+      const body = await readJson(request);
+      if (await profileFrom(request)) throw new HttpError(409, "이미 로그인되어 있습니다.");
+      const credentials = { studentId: typeof body.studentId === "string" ? body.studentId.trim() : "", password: body.password };
+      if (!/^[A-Za-z0-9]{4,32}$/.test(credentials.studentId) || typeof credentials.password !== "string" || credentials.password.length < 1 || credentials.password.length > 256) throw new HttpError(400, "학번과 비밀번호를 확인해 주세요.");
+      if (store.consumeRate) await store.consumeRate("school-login:" + credentials.studentId.toLowerCase(), 5, 60_000);
+      const registrationKey = "registration:" + createHmac("sha256", store.key).update(credentials.studentId.toLowerCase()).digest("hex");
+      const profile = await withBusy(registrationKey, async () => {
+        await portalFactory(credentials).login();
+        const existing = await store.reconnect(credentials, { now: now().getTime() });
+        if (existing) return existing;
+        const supplied = Buffer.from(String(request.headers["x-setup-token"] || ""));
+        const expected = Buffer.from(setupToken);
+        const validSetup = setupToken && supplied.length === expected.length && timingSafeEqual(supplied, expected);
+        if (!publicRegistration && !validSetup) throw new HttpError(403, "현재는 새 사용자 로그인을 받을 수 없습니다.");
+        if (validSetup && await store.setupUsed(setupToken)) throw new HttpError(410, "이 로그인 링크는 이미 사용되었습니다.");
+        return store.create(credentials, validSetup ? setupToken : "");
+      });
+      response.setHeader("Set-Cookie", cookie(profile.token));
+      return sendJson(response, 201, { connected: true });
     }
     if (request.method === "POST" && ["/api/register", "/api/reconnect"].includes(url.pathname)) {
       const body = await readJson(request);

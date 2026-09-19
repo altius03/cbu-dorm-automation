@@ -1,7 +1,7 @@
 import { createCipheriv, randomBytes } from "node:crypto";
 import { request as httpsRequest } from "node:https";
 
-import { findConflict, parseIsoDate, validatePeriod } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, findConflict, parseIsoDate, validatePeriod } from "../extension/core.mjs";
 
 const DREAM = "https://dream.tukorea.ac.kr";
 const SSO = "https://ksc.tukorea.ac.kr";
@@ -642,7 +642,7 @@ export class TukoreaPortal {
   }
 
   async applyMany(dates, { onProgress = () => {}, shouldStop = () => false } = {}) {
-    if (!Array.isArray(dates) || !dates.length || dates.length > 70 ||
+    if (!Array.isArray(dates) || !dates.length || dates.length > MAX_BATCH_DATES ||
         dates.some(date => typeof date !== "string" || !/^\d{8}$/.test(date)) || new Set(dates).size !== dates.length) {
       throw new PortalError("일괄신청 날짜가 올바르지 않습니다.");
     }

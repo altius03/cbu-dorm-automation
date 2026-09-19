@@ -5,97 +5,268 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>TUK 외박신청</title>
     <style>
-      :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif; }
+      :root {
+        color-scheme: light;
+        font-family: -apple-system, BlinkMacSystemFont, "Noto Sans KR", sans-serif;
+        color: #182230;
+        background: #f3f5f8;
+        --blue: #335cff;
+        --blue-dark: #2346cf;
+        --line: #dfe4ec;
+        --muted: #667085;
+        --soft: #f7f8fa;
+        --green: #14804a;
+        --amber: #a15c00;
+        --red: #b42318;
+      }
       * { box-sizing: border-box; }
-      body { margin: 0; min-height: 100vh; color: #17213a; background: #eef2f8; }
-      main { width: min(520px, calc(100% - 32px)); margin: 0 auto; padding: 56px 0; }
-      .card { padding: 28px; border: 1px solid #dbe1ec; border-radius: 18px; background: #fff; box-shadow: 0 12px 36px rgba(31, 42, 68, .08); }
-      h1 { margin: 0 0 8px; font-size: 28px; }
-      h2 { margin: 28px 0 8px; font-size: 18px; }
-      p { margin: 0; color: #667085; line-height: 1.6; }
-      .notice { margin-top: 18px; padding: 14px; border-radius: 12px; color: #5d4514; background: #fff7df; font-size: 13px; }
-      label { display: block; margin: 16px 0 6px; font-size: 14px; font-weight: 700; }
-      input, select { width: 100%; padding: 12px; border: 1px solid #cbd2e1; border-radius: 10px; background: white; font: inherit; }
-      button { padding: 12px 14px; border: 0; border-radius: 10px; font: inherit; font-weight: 700; cursor: pointer; }
-      button:disabled { cursor: wait; opacity: .55; }
-      .primary { width: 100%; color: #fff; background: #3157d5; }
-      #connect-form > .primary { margin-top: 18px; }
-      .actions { display: grid; grid-template-columns: 1fr 1.35fr; gap: 10px; margin-top: 18px; }
-      .secondary { color: #35405a; background: #e7eaf1; }
-      .danger { margin-top: 24px; color: #a12626; background: #fff0f0; }
-      #refresh-job { margin-top: 12px; width: 100%; }
-      #reconnect, #cancel-job { margin-top: 10px; width: 100%; }
-      #logout { margin-top: 24px; }
-      #status { min-height: 46px; margin-top: 18px; padding: 12px; border-radius: 10px; background: #f7f8fb; line-height: 1.5; white-space: pre-wrap; }
-      #status[data-kind="success"] { color: #0c6b3d; background: #e9f8ef; }
-      #status[data-kind="error"] { color: #a12626; background: #fff0f0; }
+      body { margin: 0; min-width: 320px; min-height: 100vh; }
+      button, input { font: inherit; }
+      button { cursor: pointer; }
+      button:disabled { cursor: not-allowed; opacity: .5; }
       [hidden] { display: none !important; }
+      .login-shell { width: min(440px, calc(100% - 32px)); margin: 0 auto; padding: 10vh 0 48px; }
+      .login-card, .panel { border: 1px solid var(--line); border-radius: 20px; background: #fff; box-shadow: 0 10px 32px rgba(31, 42, 68, .07); }
+      .login-card { padding: 34px; }
+      .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .04em; }
+      .brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: white; background: var(--blue); }
+      h1, h2, p { margin-top: 0; }
+      h1 { margin-bottom: 9px; font-size: clamp(25px, 5vw, 32px); letter-spacing: -.04em; }
+      h2 { margin-bottom: 4px; font-size: 18px; letter-spacing: -.02em; }
+      p { color: var(--muted); line-height: 1.55; }
+      .field { display: grid; gap: 7px; margin-top: 18px; }
+      .field label, legend { font-size: 14px; font-weight: 750; }
+      .field input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid #cbd2dd; border-radius: 11px; background: white; }
+      .field input:focus, button:focus-visible, summary:focus-visible { outline: 3px solid rgba(51, 92, 255, .2); outline-offset: 2px; }
+      .primary, .secondary, .ghost, .danger { min-height: 44px; padding: 0 16px; border: 0; border-radius: 11px; font-weight: 750; }
+      .primary { color: white; background: var(--blue); }
+      .primary:hover { background: var(--blue-dark); }
+      .secondary { color: #344054; background: #edf0f4; }
+      .ghost { color: #475467; background: transparent; }
+      .danger { color: var(--red); background: #fff0ef; }
+      .login-card .primary { width: 100%; margin-top: 22px; }
+      #login-status { margin: 16px 0 0; color: var(--red); font-size: 13px; line-height: 1.5; }
+      #login-status:empty { display: none; }
+      .privacy-note { margin: 16px 0 0; font-size: 12px; }
+      .app-shell { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 26px 0 60px; }
+      .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+      .app-header .brand { margin: 0; }
+      .account-menu { position: relative; }
+      .account-menu summary { padding: 10px 13px; border-radius: 10px; color: #475467; background: #fff; font-weight: 700; list-style: none; cursor: pointer; }
+      .account-menu summary::-webkit-details-marker { display: none; }
+      .account-popover { position: absolute; z-index: 20; top: 48px; right: 0; display: grid; width: 190px; gap: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 13px; background: white; box-shadow: 0 12px 30px rgba(31, 42, 68, .14); }
+      .account-popover button { width: 100%; }
+      #status { margin-bottom: 16px; padding: 12px 14px; border: 1px solid #dbe3ff; border-radius: 12px; color: #2947aa; background: #f2f5ff; line-height: 1.45; }
+      #status:empty { display: none; }
+      #status[data-kind="success"] { border-color: #bce8ce; color: #086a3c; background: #effaf3; }
+      #status[data-kind="error"] { border-color: #ffd0cc; color: #a1261c; background: #fff3f2; }
+      .workspace { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .8fr); gap: 18px; align-items: start; }
+      .panel { padding: 22px; }
+      .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+      .panel-heading p { margin: 0; font-size: 13px; }
+      .calendar-toolbar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; }
+      .calendar-toolbar button { width: 44px; height: 44px; border: 0; border-radius: 11px; color: #344054; background: var(--soft); font-size: 22px; }
+      #month-title { margin: 0; text-align: center; font-size: 20px; }
+      .weekday-row, #calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+      .weekday-row { margin: 18px 0 8px; color: #7b8493; font-size: 12px; font-weight: 700; text-align: center; }
+      .weekday-row span:first-child { color: #c13c32; }
+      .weekday-row span:last-child { color: #335dcc; }
+      .day { position: relative; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 12px; color: #344054; background: transparent; font-weight: 650; }
+      .day:hover:not(:disabled) { background: #f0f3ff; }
+      .day.is-today { border-color: #8ea5ff; }
+      .day.is-selected { color: white; background: var(--blue); }
+      .day.is-past { color: #b4bac4; }
+      .day.has-application { box-shadow: inset 0 0 0 2px #4f78ff; }
+      .day.status-saved { box-shadow: inset 0 0 0 2px #1b9a5a; background: #eaf8f0; color: #096b3b; }
+      .day.status-exists { box-shadow: inset 0 0 0 2px #4f78ff; background: #edf2ff; color: #234bbd; }
+      .day.status-overlap, .day.status-not_attempted { background: #eef0f3; color: #667085; }
+      .day.status-unknown { box-shadow: inset 0 0 0 2px #e09a29; background: #fff6df; color: #8a4f00; }
+      .day.is-selected.status-saved, .day.is-selected.status-exists, .day.is-selected.status-overlap,
+      .day.is-selected.status-not_attempted, .day.is-selected.status-unknown { color: white; background: var(--blue); }
+      .day::after { position: absolute; right: 6px; bottom: 4px; content: attr(data-mark); font-size: 11px; font-weight: 900; }
+      .calendar-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 16px; color: #667085; font-size: 12px; }
+      .calendar-legend span { display: inline-flex; align-items: center; gap: 5px; }
+      .dot { width: 10px; height: 10px; border-radius: 50%; background: #98a2b3; }
+      .dot.selected { background: var(--blue); }
+      .dot.saved { background: #1b9a5a; }
+      .dot.portal { border: 2px solid #4f78ff; background: white; }
+      .dot.check { background: #e09a29; }
+      fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+      legend { margin-bottom: 10px; }
+      .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 22px; padding: 4px; border-radius: 12px; background: #edf0f4; }
+      .mode-tabs label { position: relative; }
+      .mode-tabs input { position: absolute; opacity: 0; }
+      .mode-tabs span { display: grid; min-height: 42px; place-items: center; border-radius: 9px; color: #667085; font-size: 14px; font-weight: 750; cursor: pointer; }
+      .mode-tabs input:checked + span { color: #182230; background: white; box-shadow: 0 2px 8px rgba(31, 42, 68, .08); }
+      .control-copy { margin-bottom: 18px; font-size: 13px; }
+      .choice-list { display: grid; gap: 8px; }
+      .choice { position: relative; display: flex; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+      .choice:has(input:checked) { border-color: #7891f8; background: #f4f6ff; }
+      .choice input { margin-top: 2px; accent-color: var(--blue); }
+      .choice strong, .choice small { display: block; }
+      .choice small { margin-top: 3px; color: var(--muted); }
+      .options-section + .options-section { margin-top: 20px; }
+      #custom-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
+      #custom-weekdays label { position: relative; }
+      #custom-weekdays input { position: absolute; opacity: 0; }
+      #custom-weekdays span { display: grid; min-height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: #667085; font-size: 12px; font-weight: 700; cursor: pointer; }
+      #custom-weekdays input:checked + span { border-color: var(--blue); color: var(--blue); background: #f2f5ff; }
+      .selection-summary { margin: 20px 0 12px; padding: 13px; border-radius: 12px; color: #344054; background: var(--soft); font-size: 14px; font-weight: 700; }
+      #submit-selection { width: 100%; }
+      #cancel-job { width: 100%; margin-top: 9px; }
+      .results-panel { margin-top: 18px; }
+      #history-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+      .history-item { display: grid; gap: 4px; min-height: 62px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 11px; color: #344054; background: white; text-align: left; }
+      .history-item[aria-pressed="true"] { border-color: #7891f8; background: #f4f6ff; }
+      .history-item small { color: var(--muted); }
+      #history-empty { margin: 0; font-size: 14px; }
+      #refresh-data { white-space: nowrap; }
+      @media (max-width: 760px) {
+        .app-shell { width: 100%; padding: 18px 14px 110px; }
+        .workspace { grid-template-columns: 1fr; }
+        .panel { padding: 18px 14px; border-radius: 16px; }
+        .calendar-panel { order: 1; }
+        .control-panel { order: 2; }
+        .day { min-height: 42px; border-radius: 10px; }
+        #history-list { grid-template-columns: 1fr; }
+        .submit-bar { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; padding: 10px 14px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(255, 255, 255, .96); backdrop-filter: blur(12px); }
+        #submit-selection { max-width: 520px; margin: 0 auto; display: block; }
+        #cancel-job { max-width: 520px; margin: 8px auto 0; display: block; }
+      }
       @media (max-width: 480px) {
-        main { width: 100%; padding: 0; }
-        .card { min-height: 100vh; padding: 24px 18px; border: 0; border-radius: 0; box-shadow: none; }
-        input, select, button { min-height: 48px; font-size: 16px; }
-        .actions { grid-template-columns: 1fr; }
+        .login-shell { width: 100%; padding: 0; }
+        .login-card { min-height: 100vh; padding: 42px 20px; border: 0; border-radius: 0; box-shadow: none; }
+        .day { min-height: 38px; font-size: 13px; }
+        .weekday-row, #calendar-grid { gap: 3px; }
       }
     </style>
   </head>
   <body>
     <main>
-      <section class="card">
-        <h1>외박신청</h1>
-        <p>계정을 한 번 연결하면 날짜나 일괄신청 방식만 선택하면 됩니다.</p>
-
-        <section id="connect-section" hidden>
-          <h2>학교 계정 연결</h2>
-          <form id="connect-form">
-            <label for="student-id">포털 로그인 아이디</label>
-            <input id="student-id" name="studentId" autocomplete="username" maxlength="32" placeholder="통합로그인 화면에서 사용하는 아이디" required />
-            <label for="password">포털 비밀번호</label>
-            <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
-            <button class="primary" type="submit">계정 연결</button>
-            <button id="reconnect" class="secondary" type="button">저장된 계정 다시 연결</button>
-          </form>
-          <p class="notice">학교 로그인에 성공한 뒤 계정 정보를 암호화해 보호된 저장소에 보관합니다. 이후 자동 로그인에 사용하며, 연결 후 저장된 계정을 삭제할 수 있습니다.</p>
-        </section>
-
-        <section id="apply-section" hidden>
-          <h2>신청 날짜</h2>
-          <form id="apply-form">
-            <label for="start">시작일</label>
-            <input id="start" name="start" type="date" required />
-            <label for="end">종료일</label>
-            <input id="end" name="end" type="date" />
-            <div class="actions">
-              <button id="check" class="secondary" type="button">가능 여부 확인</button>
-              <button id="apply" class="primary" type="submit">신청하기</button>
+      <section id="login-section" class="login-shell" hidden>
+        <div class="login-card">
+          <div class="brand"><span class="brand-mark">T</span> TUK DORM</div>
+          <h1>외박신청 로그인</h1>
+          <p>학교 포털 계정으로 로그인하면 외박 날짜를 바로 선택할 수 있습니다.</p>
+          <form id="login-form">
+            <div class="field">
+              <label for="student-id">학번 또는 포털 아이디</label>
+              <input id="student-id" name="studentId" autocomplete="username" maxlength="32" required />
             </div>
-          </form>
-
-          <h2>일괄신청</h2>
-          <form id="batch-form">
-            <label for="batch-kind">신청 방식</label>
-            <select id="batch-kind" name="kind">
-              <option value="daily-month">앞으로 30일 — 매일 각각 1일</option>
-              <option value="weekends-week">앞으로 1주 — 토·일</option>
-              <option value="weekends-month">앞으로 30일 — 토·일</option>
-              <option value="weekends-term">이번 학기 남은 기간 — 토·일</option>
-            </select>
-
-            <div class="actions">
-              <button id="batch-preview" class="secondary" type="button">대상 날짜 확인</button>
-              <button class="primary" type="submit">일괄 신청</button>
+            <div class="field">
+              <label for="password">포털 비밀번호</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
             </div>
+            <button class="primary" type="submit">로그인</button>
           </form>
-          <button id="refresh-job" class="secondary" type="button">처리 결과 다시 확인</button>
-          <button id="cancel-job" class="danger" type="button" hidden>남은 신청 중단</button>
-          <label for="job-history">이전 신청 결과</label>
-          <select id="job-history"><option value="">기록 없음</option></select>
-          <p class="notice">오늘부터 대상 날짜를 자동 계산해 각 날짜를 별도의 1일 신청으로 저장합니다. 학기 말은 1학기 6월 30일, 2학기 12월 31일 기준입니다. 이미 신청했거나 기존 기간과 겹치는 날짜는 자동으로 제외됩니다.</p>
-          <p class="notice">화면을 닫아도 접수된 신청은 계속 처리됩니다. ‘남은 신청 중단’을 누르면 현재 건의 결과를 확인한 뒤 멈추며, 이미 저장된 신청은 유지됩니다. ‘확인 필요’ 날짜는 학교 포털에서 확인해 주세요.</p>
-          <button id="logout" class="secondary" type="button">로그아웃</button>
-          <button id="delete-account" class="danger" type="button">저장된 계정 삭제</button>
-        </section>
+          <div id="login-status" role="status" aria-live="polite"></div>
+          <p class="privacy-note">로그인 정보는 학교 포털 자동 신청에만 사용되며 암호화해 저장합니다.</p>
+        </div>
+      </section>
 
-        <div id="status" role="status" aria-live="polite">연결 상태를 확인하고 있습니다…</div>
+      <section id="app-section" class="app-shell" hidden>
+        <header class="app-header">
+          <div class="brand"><span class="brand-mark">T</span> 외박신청</div>
+          <details class="account-menu">
+            <summary>계정 설정</summary>
+            <div class="account-popover">
+              <button id="logout" class="secondary" type="button">로그아웃</button>
+              <button id="delete-account" class="danger" type="button">저장정보 삭제</button>
+            </div>
+          </details>
+        </header>
+
+        <div id="status" role="status" aria-live="polite">로그인 상태를 확인하고 있습니다…</div>
+
+        <div class="workspace">
+          <section class="panel calendar-panel" aria-labelledby="calendar-heading">
+            <div class="panel-heading">
+              <div>
+                <h2 id="calendar-heading">날짜 선택</h2>
+                <p>날짜를 누르거나 자동 선택 결과를 확인하세요.</p>
+              </div>
+              <button id="today-month" class="ghost" type="button">오늘</button>
+            </div>
+            <div class="calendar-toolbar">
+              <button id="prev-month" type="button" aria-label="이전 달">‹</button>
+              <h2 id="month-title" aria-live="polite"></h2>
+              <button id="next-month" type="button" aria-label="다음 달">›</button>
+            </div>
+            <div class="weekday-row" aria-hidden="true">
+              <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+            </div>
+            <div id="calendar-grid" role="grid" aria-label="외박 날짜 달력"></div>
+            <div class="calendar-legend" aria-label="달력 표시 설명">
+              <span><i class="dot selected"></i>선택</span>
+              <span><i class="dot saved"></i>완료</span>
+              <span><i class="dot portal"></i>학교 신청내역</span>
+              <span><i class="dot check"></i>확인 필요</span>
+              <span><i class="dot"></i>제외·미처리</span>
+            </div>
+          </section>
+
+          <section class="panel control-panel" aria-labelledby="request-heading">
+            <h2 id="request-heading">어떻게 선택할까요?</h2>
+            <form id="request-form">
+              <div class="mode-tabs" role="group" aria-label="날짜 선택 방식">
+                <label><input id="mode-manual" type="radio" name="mode" value="manual" checked /><span>직접 선택</span></label>
+                <label><input id="mode-auto" type="radio" name="mode" value="auto" /><span>자동 선택</span></label>
+              </div>
+
+              <section id="manual-controls">
+                <p class="control-copy">달력에서 외박할 날짜를 누르세요. 선택한 날짜는 각각 1일씩 신청됩니다.</p>
+              </section>
+
+              <section id="auto-controls" hidden>
+                <fieldset class="options-section">
+                  <legend>언제까지</legend>
+                  <div id="horizon-options" class="choice-list">
+                    <label class="choice"><input type="radio" name="range" value="semester" checked /><span><strong>학기 퇴관까지</strong><small data-horizon="semester">일정 확인 중</small></span></label>
+                    <label class="choice"><input type="radio" name="range" value="sixMonths" /><span><strong>6개월 퇴관까지</strong><small data-horizon="sixMonths">일정 확인 중</small></span></label>
+                    <label class="choice"><input type="radio" name="range" value="twelveMonths" /><span><strong>12개월 퇴관까지</strong><small data-horizon="twelveMonths">일정 확인 중</small></span></label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="options-section">
+                  <legend>어떤 날을</legend>
+                  <div class="choice-list">
+                    <label class="choice"><input type="radio" name="pattern" value="daily" /><span><strong>매일</strong><small>하루씩 각각 신청</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekdays" /><span><strong>평일 전체</strong><small>월요일부터 금요일</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekends" checked /><span><strong>주말 전체</strong><small>토요일과 일요일</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="custom" /><span><strong>지정 요일</strong><small>원하는 요일만 반복</small></span></label>
+                  </div>
+                  <div id="custom-weekdays" hidden>
+                    <label><input type="checkbox" name="weekday" value="0" /><span>일</span></label>
+                    <label><input type="checkbox" name="weekday" value="1" /><span>월</span></label>
+                    <label><input type="checkbox" name="weekday" value="2" /><span>화</span></label>
+                    <label><input type="checkbox" name="weekday" value="3" /><span>수</span></label>
+                    <label><input type="checkbox" name="weekday" value="4" /><span>목</span></label>
+                    <label><input type="checkbox" name="weekday" value="5" /><span>금</span></label>
+                    <label><input type="checkbox" name="weekday" value="6" /><span>토</span></label>
+                  </div>
+                </fieldset>
+              </section>
+
+              <div id="selection-summary" class="selection-summary">선택한 날짜가 없습니다.</div>
+              <div class="submit-bar">
+                <button id="submit-selection" class="primary" type="submit" disabled>날짜를 선택해 주세요</button>
+                <button id="cancel-job" class="danger" type="button" hidden>남은 신청 중단</button>
+              </div>
+            </form>
+          </section>
+        </div>
+
+        <section class="panel results-panel" aria-labelledby="history-heading">
+          <div class="panel-heading">
+            <div>
+              <h2 id="history-heading">최근 신청 결과</h2>
+              <p>결과를 누르면 달력에서 날짜별 상태를 확인할 수 있습니다.</p>
+            </div>
+            <button id="refresh-data" class="secondary" type="button">새로고침</button>
+          </div>
+          <div id="history-list"></div>
+          <p id="history-empty">아직 신청 기록이 없습니다.</p>
+        </section>
       </section>
     </main>
     <script type="module" src="/app.js"></script>

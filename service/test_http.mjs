@@ -90,8 +90,10 @@ try {
   assert.ok(health.headers["x-request-id"]);
   const html = await call("/");
   assert.equal(html.status, 200);
-  assert.match(html.body, /id="batch-kind"/);
-  assert.doesNotMatch(html.body.match(/<form id="batch-form">([\s\S]*?)<\/form>/)[1], /<input/);
+  assert.match(html.body, /id="login-form"/);
+  assert.match(html.body, /id="calendar-grid"/);
+  assert.match(html.body, /학기 퇴관까지/);
+  assert.doesNotMatch(html.body, /저장된 계정 다시 연결|계정 연결/);
   assert.equal((await call("/app.js")).status, 200);
   assert.equal((await call("/api/health", { headers: { Host: "evil.example" } })).status, 403);
 
@@ -107,7 +109,7 @@ try {
   assert.equal((await call("/api/batch/preview", { ...previewRequest, raw: "x".repeat(16_385) })).status, 413);
   assert.equal((await call("/api/batch/preview", { ...previewRequest, token: undefined })).status, 401);
 
-  const connected = await call("/api/register", {
+  const connected = await call("/api/login", {
     method: "POST", body: { studentId: "httpnew3", password: "fixture-password" },
     headers: { Host: "overnight.example", Origin: publicOrigin, "X-Setup-Token": setupToken },
   });
@@ -119,6 +121,7 @@ try {
   const session = await call("/api/session", { headers: { Host: "overnight.example", Origin: publicOrigin, Cookie: cookie.split(";")[0] } });
   assert.equal(session.body.connected, true);
   assert.equal("credentials" in session.body, false);
+  assert.equal(session.body.horizons.find(item => item.id === "semester").end, "2026-12-23");
   assert.deepEqual((await call("/api/applications", { token: owner.token })).body.applications, [
     { start: "2026-09-18", end: "2026-09-20", active: true },
   ]);
@@ -183,7 +186,7 @@ try {
   assert.equal(rejectedReconnect.status, 502);
   assert.equal(store.find(owner.token, { credentials: false }).id, owner.id);
   const beforeReconnectLogins = loginCalls;
-  const reconnected = await call("/api/reconnect", { method: "POST", body: { studentId: "httpowner1", password: "fixture-password" } });
+  const reconnected = await call("/api/login", { method: "POST", body: { studentId: "httpowner1", password: "fixture-password" } });
   assert.equal(reconnected.status, 201);
   assert.equal(loginCalls, beforeReconnectLogins + 1);
   const renewedCookie = reconnected.headers["set-cookie"][0];

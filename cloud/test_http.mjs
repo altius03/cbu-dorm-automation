@@ -199,7 +199,7 @@ try {
   assert.equal(registered.status, 201);
   const token = tokenOf(registered);
   const ownerId = database.find(token).id;
-  const second = await otherInstance("/api/register", { method: "POST", body: { studentId: "cloudother2", password } });
+  const second = await otherInstance("/api/login", { method: "POST", body: { studentId: "cloudother2", password } });
   assert.equal(second.status, 201, "public registration is not a one-time setup link");
   const otherToken = tokenOf(second);
   const session = await otherInstance("/api/session", { token });
@@ -307,7 +307,7 @@ try {
   assert.equal((await call("/api/register", { method: "POST", body: {} })).status, 429);
   clock = new Date(clock.getTime() + 60_001);
 
-  const reconnected = await otherInstance("/api/reconnect", { method: "POST", body: credentials });
+  const reconnected = await otherInstance("/api/login", { method: "POST", body: credentials });
   assert.equal(reconnected.status, 201);
   const newToken = tokenOf(reconnected);
   assert.equal((await call("/api/session", { token })).body.connected, false);

@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
-import { PostgresStore } from "./store.mjs";
+import { PostgresStore, internals } from "./store.mjs";
+
+const longBatch = Array.from({ length: 96 }, (_, index) => {
+  const date = new Date(Date.UTC(2099, 0, index + 1)).toISOString().slice(0, 10).replaceAll("-", "");
+  return date;
+});
+assert.equal(internals.datesForJob(longBatch).length, 96);
+assert.throws(() => internals.datesForJob(Array.from({ length: 371 }, (_, index) => ({ date: longBatch[index % longBatch.length], end: longBatch[index % longBatch.length] }))), /날짜/);
 
 async function restrictedMigration(root, connectionUrl) {
   const suffix = randomUUID().replaceAll("-", "");

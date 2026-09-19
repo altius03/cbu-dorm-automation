@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { decodeKey, seal, tokenHash, unseal } from "../service/crypto.mjs";
 import { HttpError } from "../service/errors.mjs";
-import { parseIsoDate } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, parseIsoDate } from "../extension/core.mjs";
 
 export { HttpError as StoreError } from "../service/errors.mjs";
 const leaseMs = 360_000; // Must exceed the 300-second worker limit; an expired attempt is read-only reconciliation.
@@ -12,7 +12,7 @@ const jobView = row => row ? { ...row.result, id: row.id, status: row.status, ca
 const terminalDate = new Set(["saved", "exists", "overlap", "unknown", "not_attempted"]);
 
 function datesForJob(dates) {
-  if (!Array.isArray(dates) || !dates.length || dates.length > 70) throw new HttpError(400, "신청 날짜를 확인해 주세요.");
+  if (!Array.isArray(dates) || !dates.length || dates.length > MAX_BATCH_DATES) throw new HttpError(400, "신청 날짜를 확인해 주세요.");
   const result = dates.map(item => {
     const date = typeof item === "string" ? item : item?.date;
     const end = typeof item === "string" ? item : item?.end || date;

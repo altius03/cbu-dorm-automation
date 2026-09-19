@@ -148,6 +148,11 @@ try {
   assert.equal(preview.body.dates.length, 30);
   assert.equal(preview.body.dates.at(-1), "2026-10-18");
   assert.equal(batchCalls, 0);
+  const semester = await call(app, "/api/batch/preview", { token: owner.token, body: { range: "semester", pattern: "weekends" } });
+  assert.equal(semester.body.dates.length, 28);
+  assert.equal(semester.body.dates.at(-1), "2026-12-20");
+  const manual = await call(app, "/api/batch/preview", { token: owner.token, body: { dates: ["2026-09-21", "2026-09-20"] } });
+  assert.deepEqual(manual.body.dates, ["2026-09-20", "2026-09-21"]);
   const plan = preview.body.plan;
   assert.equal((await call(app, "/api/batch/apply", { token: other.token, body: { plan } })).statusCode, 403);
   assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan: plan + "tampered" } })).statusCode, 400);
