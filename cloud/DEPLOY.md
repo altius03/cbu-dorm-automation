@@ -10,7 +10,7 @@ HTTPS → Vercel Workflow → Supabase의 즉시 취소 작업을 검증했습�
 연결도 확인했습니다. 이때 외박 내역 조회나 저장 요청은 호출하지 않았습니다.
 이후 실제 학교 계정으로 로그인, 입주·학기·기존 신청 조회, 단건 저장, 저장 후 재조회와
 Supabase 완료 기록까지 확인했습니다. 계정과 신청 날짜는 문서에 기록하지 않습니다.
-공개 가입은 `OVERNIGHT_PUBLIC_REGISTRATION=0`으로 잠겨 있습니다.
+계정 연결은 `OVERNIGHT_PUBLIC_REGISTRATION=1`로 열려 있으며 동아리 내부 사용을 전제로 합니다.
 기존 `service/data`의 계정·키·신청 기록은 이 구현에서 변경하거나 업로드하지 않습니다.
 기존 Supabase `cbu-wiki` 프로젝트는 사용하지 않습니다.
 
