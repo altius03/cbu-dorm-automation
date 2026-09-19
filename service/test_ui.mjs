@@ -24,7 +24,7 @@ for (const endpoint of ["/api/login", "/api/applications", "/api/batch/history",
   assert.ok(script.includes(endpoint), `${endpoint} UI flow missing`);
 }
 assert.match(script, /state\.activeJob = job;[\s\S]*renderCalendar/);
-assert.match(script, /historyDate\(summary\.first, summary\.last\)[\s\S]*달력에서 보기/);
+assert.match(script, /historyDate\(summary\.first, summary\.last\)[\s\S]*달력 보기/);
 assert.match(script, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
 assert.match(script, /status-saved|`status-\$\{mark\}`/);
 assert.match(script, /const body = \{ dates \}/);

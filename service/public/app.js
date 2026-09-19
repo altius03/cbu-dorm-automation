@@ -336,7 +336,7 @@ function renderHistory() {
     countsLine.className = "history-counts";
     countsLine.textContent = parts.join(" · ") || summary.label;
     action.className = "history-action";
-    action.textContent = state.activeJob?.id === job.id ? "달력에 표시 중" : "달력에서 보기 →";
+    action.textContent = state.activeJob?.id === job.id ? "달력에 표시 중" : "달력 보기";
     button.setAttribute("aria-label", `${title.textContent}, ${summary.label}, ${meta.textContent}, ${action.textContent}`);
     button.append(top, meta, countsLine, action);
     button.addEventListener("click", () => {

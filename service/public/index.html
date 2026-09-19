@@ -120,23 +120,19 @@
       #submit-selection { width: 100%; }
       #cancel-job { width: 100%; margin-top: 9px; }
       .results-panel { margin-top: 18px; }
-      #history-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-      .history-item { display: grid; gap: 8px; min-height: 132px; padding: 14px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 13px; color: #344054; background: white; text-align: left; }
-      .history-item:hover { border-color: #a9b8f4; box-shadow: 0 6px 18px rgba(31, 42, 68, .08); }
-      .history-item[aria-pressed="true"] { border-color: var(--blue); background: #f4f6ff; }
-      .history-success { border-left-color: var(--green); }
-      .history-warning { border-left-color: var(--amber); }
-      .history-running { border-left-color: var(--blue); }
-      .history-neutral { border-left-color: #98a2b3; }
-      .history-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+      #history-list { border-top: 1px solid var(--line); }
+      .history-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "top action" "meta action" "counts action"; width: 100%; gap: 5px 20px; padding: 16px 6px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; color: #344054; background: transparent; text-align: left; }
+      .history-item:hover, .history-item[aria-pressed="true"] { background: var(--soft); }
+      .history-top { grid-area: top; display: flex; align-items: baseline; justify-content: flex-start; gap: 9px; }
       .history-top strong { color: #182230; font-size: 15px; }
-      .history-badge { flex: none; padding: 4px 7px; border-radius: 999px; color: #475467; background: #edf0f4; font-size: 11px; font-weight: 800; }
-      .history-success .history-badge { color: #086a3c; background: #eaf8f0; }
-      .history-warning .history-badge { color: #8a4f00; background: #fff3d6; }
-      .history-running .history-badge { color: #2947aa; background: #edf2ff; }
-      .history-meta { color: var(--muted); font-size: 12px; }
-      .history-counts { color: #475467; font-size: 12px; font-weight: 700; }
-      .history-action { margin-top: auto; color: var(--blue); font-size: 12px; font-weight: 800; }
+      .history-badge { flex: none; color: #667085; font-size: 12px; font-weight: 700; }
+      .history-success .history-badge { color: #087443; }
+      .history-warning .history-badge { color: #8a4f00; }
+      .history-running .history-badge { color: #2947aa; }
+      .history-meta { grid-area: meta; color: var(--muted); font-size: 12px; }
+      .history-counts { grid-area: counts; color: #475467; font-size: 12px; font-weight: 700; }
+      .history-action { grid-area: action; align-self: center; color: #475467; font-size: 12px; font-weight: 700; }
+      .history-item:hover .history-action { color: var(--blue); }
       #history-empty { margin: 0; font-size: 14px; }
       #refresh-data { white-space: nowrap; }
       .panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
@@ -147,7 +143,6 @@
         .calendar-panel { order: 1; }
         .control-panel { order: 2; }
         .day { min-height: 42px; border-radius: 10px; }
-        #history-list { grid-template-columns: 1fr; }
         .submit-bar { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; padding: 10px 14px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(255, 255, 255, .96); backdrop-filter: blur(12px); }
         #submit-selection { max-width: 520px; margin: 0 auto; display: block; }
         #cancel-job { max-width: 520px; margin: 8px auto 0; display: block; }
@@ -281,7 +276,7 @@
           <div class="panel-heading">
             <div>
               <h2 id="history-heading">최근 신청 결과</h2>
-              <p>결과 카드를 누르면 해당 날짜와 상태를 달력에서 바로 확인할 수 있습니다.</p>
+              <p>항목을 누르면 해당 날짜와 상태를 달력에서 바로 확인할 수 있습니다.</p>
             </div>
             <div class="panel-actions">
               <button id="reconcile-job" class="secondary" type="button" hidden>학교 내역으로 결과 다시 확인</button>
