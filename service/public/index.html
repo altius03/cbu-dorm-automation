@@ -110,7 +110,6 @@
       .choice input { margin-top: 2px; accent-color: var(--blue); }
       .choice strong, .choice small { display: block; }
       .choice small { margin-top: 3px; color: var(--muted); }
-      #schedule-meta { margin: 9px 2px 0; color: var(--muted); font-size: 12px; }
       .options-section + .options-section { margin-top: 20px; }
       #custom-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
       #custom-weekdays label { position: relative; }
@@ -190,7 +189,7 @@
             <div class="panel-heading">
               <div>
                 <h2 id="calendar-heading">날짜 선택</h2>
-                <p>날짜를 누르거나 자동 선택 결과를 확인하세요.</p>
+                <p>오늘부터 31일 안의 날짜를 선택하세요.</p>
               </div>
               <button id="today-month" class="ghost" type="button">오늘</button>
             </div>
@@ -218,23 +217,22 @@
             <h2 id="request-heading">어떻게 선택할까요?</h2>
             <form id="request-form">
               <div class="mode-tabs" role="group" aria-label="날짜 선택 방식">
-                <label><input id="mode-manual" type="radio" name="mode" value="manual" checked /><span>직접 선택</span></label>
+                <label><input id="mode-manual" type="radio" name="mode" value="manual" checked /><span>달력 직접 선택</span></label>
                 <label><input id="mode-auto" type="radio" name="mode" value="auto" /><span>자동 선택</span></label>
               </div>
 
               <section id="manual-controls">
-                <p class="control-copy">달력에서 외박할 날짜를 누르세요. 연속된 날짜는 최대 7박 8일씩 묶어 신청합니다.</p>
+                <p class="control-copy">오늘부터 31일 안에서 외박할 날짜를 누르세요. 연속된 날짜는 최대 7박 8일씩 묶어 신청합니다.</p>
               </section>
 
               <section id="auto-controls" hidden>
                 <fieldset class="options-section">
-                  <legend>언제까지</legend>
+                  <legend>기간</legend>
                   <div id="horizon-options" class="choice-list">
-                    <label class="choice"><input type="radio" name="range" value="semester" checked /><span><strong>학기 퇴관까지</strong><small data-horizon="semester">일정 확인 중</small></span></label>
-                    <label class="choice"><input type="radio" name="range" value="sixMonths" /><span><strong>6개월 퇴관까지</strong><small data-horizon="sixMonths">일정 확인 중</small></span></label>
-                    <label class="choice"><input type="radio" name="range" value="twelveMonths" /><span><strong>12개월 퇴관까지</strong><small data-horizon="twelveMonths">일정 확인 중</small></span></label>
+                    <label class="choice"><input type="radio" name="range" value="7" /><span><strong>1주</strong><small>오늘 포함 7일</small></span></label>
+                    <label class="choice"><input type="radio" name="range" value="14" /><span><strong>2주</strong><small>오늘 포함 14일</small></span></label>
+                    <label class="choice"><input type="radio" name="range" value="31" checked /><span><strong>31일</strong><small>한 달 단위 최대 기간</small></span></label>
                   </div>
-                  <p id="schedule-meta"></p>
                 </fieldset>
 
                 <fieldset class="options-section">

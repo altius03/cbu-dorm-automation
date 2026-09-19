@@ -4,7 +4,7 @@ import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { MAX_BATCH_DATES, buildBatchDates, findConflict, groupBatchDates, localIsoDate, parseIsoDate, residencyHorizons, validatePeriod } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, buildBatchDates, findConflict, groupBatchDates, localIsoDate, parseIsoDate, validatePeriod } from "../extension/core.mjs";
 import { PortalError, TukoreaPortal } from "./portal.mjs";
 import { HttpError } from "./errors.mjs";
 
@@ -63,9 +63,9 @@ export function periodFrom(body, now = koreaNow()) {
   catch (error) { throw new HttpError(400, error.message); }
 }
 
-export function batchDatesFrom(body, now = koreaNow(), schedules) {
+export function batchDatesFrom(body, now = koreaNow()) {
   try {
-    const dates = buildBatchDates(body, localIsoDate(now), schedules).filter(value => {
+    const dates = buildBatchDates(body, localIsoDate(now)).filter(value => {
       try { validatePeriod(value, value, now); return true; }
       catch { return false; }
     });
@@ -101,18 +101,11 @@ export function createApplication({
     try { return await task(); }
     finally { phases[name] = (phases[name] || 0) + Math.round(performance.now() - started); }
   };
-  const currentHorizons = async (today, phases) => residencyHorizons(
-    today,
-    store.schedules ? await measure(phases, "scheduleMs", () => store.schedules()) : undefined,
-  );
   const currentContext = async (today, phases) => {
-    const [horizons, holidays] = await Promise.all([
-      currentHorizons(today, phases),
-      store.holidays
-        ? measure(phases, "holidayMs", () => store.holidays(today, `${Number(today.slice(0, 4)) + 1}-12-31`))
-        : [],
-    ]);
-    return { today, horizons, holidays };
+    const holidays = store.holidays
+      ? await measure(phases, "holidayMs", () => store.holidays(today, `${Number(today.slice(0, 4)) + 1}-12-31`))
+      : [];
+    return { today, maxSelectionDays: MAX_BATCH_DATES, holidays };
   };
   const cookie = (token, maxAge = 31_536_000) => [
     sessionCookieName + "=" + token, "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=" + maxAge, secureCookie ? "Secure" : "",
@@ -374,8 +367,7 @@ export function createApplication({
     }
     if (request.method === "POST" && url.pathname === "/api/batch/preview") {
       const profile = await requireProfile(request);
-      const schedules = store.schedules ? await measure(phases, "scheduleMs", () => store.schedules()) : undefined;
-      const dates = batchDatesFrom(await readJson(request), koreaNow(now()), schedules);
+      const dates = batchDatesFrom(await readJson(request), koreaNow(now()));
       const periods = groupBatchDates(dates);
       const id = randomUUID();
       const payload = Buffer.from(JSON.stringify({ id, profileId: profile.id, dates, expires: now().getTime() + 600_000 })).toString("base64url");

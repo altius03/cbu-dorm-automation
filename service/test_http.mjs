@@ -20,7 +20,7 @@ const other = store.create(otherCredentials);
 const publicOrigin = "https://overnight.example";
 const setupToken = "fixture-http-setup-token-".repeat(3);
 const logs = [];
-let clock = new Date();
+let clock = new Date("2026-09-19T03:00:00Z");
 let loginCalls = 0;
 let applicationCalls = 0;
 let batchCalls = 0;
@@ -98,12 +98,14 @@ try {
   assert.equal(html.status, 200);
   assert.match(html.body, /id="login-form"/);
   assert.match(html.body, /id="calendar-grid"/);
-  assert.match(html.body, /학기 퇴관까지/);
+  assert.match(html.body, /오늘 포함 7일/);
   assert.doesNotMatch(html.body, /저장된 계정 다시 연결|계정 연결/);
   assert.equal((await call("/app.js")).status, 200);
   assert.equal((await call("/api/health", { headers: { Host: "evil.example" } })).status, 403);
 
-  const previewRequest = { method: "POST", token: owner.token, body: { kind: "daily-month" } };
+  const monthDates = Array.from({ length: 31 }, (_, index) =>
+    new Date(Date.UTC(2026, 8, 19 + index)).toISOString().slice(0, 10));
+  const previewRequest = { method: "POST", token: owner.token, body: { dates: monthDates } };
   for (const headers of [
     { Origin: "https://evil.example" },
     { "Sec-Fetch-Site": "cross-site" },
@@ -122,7 +124,8 @@ try {
   assert.equal(connected.status, 201);
   assert.deepEqual(connected.body.applications, [{ start: "2026-09-18", end: "2026-09-20", active: true }]);
   assert.deepEqual(connected.body.jobs, []);
-  assert.equal(connected.body.horizons.find(item => item.id === "semester").end, "2026-12-23");
+  assert.equal(connected.body.maxSelectionDays, 31);
+  assert.equal("horizons" in connected.body, false);
   const cookie = connected.headers["set-cookie"]?.[0];
   assert.match(cookie, /; HttpOnly/);
   assert.match(cookie, /; SameSite=Strict/);
@@ -130,7 +133,8 @@ try {
   const session = await call("/api/session", { headers: { Host: "overnight.example", Origin: publicOrigin, Cookie: cookie.split(";")[0] } });
   assert.equal(session.body.connected, false);
   assert.equal("credentials" in session.body, false);
-  assert.equal(session.body.horizons.find(item => item.id === "semester").end, "2026-12-23");
+  assert.equal(session.body.maxSelectionDays, 31);
+  assert.equal("horizons" in session.body, false);
   assert.deepEqual((await call("/api/applications", { method: "POST", token: owner.token, body: ownerCredentials })).body.applications, [
     { start: "2026-09-18", end: "2026-09-20", active: true },
   ]);
@@ -140,7 +144,7 @@ try {
 
   const preview = await call("/api/batch/preview", previewRequest);
   assert.equal(preview.status, 200);
-  assert.ok(preview.body.dates.length >= 29);
+  assert.equal(preview.body.dates.length, 31);
   assert.ok(preview.body.periods.length < preview.body.dates.length);
   assert.equal(batchCalls, 0);
   assert.equal((await call("/api/batch/apply", { method: "POST", token: other.token, body: { plan: preview.body.plan, ...ownerCredentials } })).status, 403);

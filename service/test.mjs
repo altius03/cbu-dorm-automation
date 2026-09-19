@@ -156,14 +156,14 @@ try {
   assert.equal((await call(proxied, "/api/health", { method: "GET", socket: {}, headers: { host: "overnight.example" } })).statusCode, 200);
   assert.equal((await call(proxied, "/api/health", { method: "GET", socket: {}, headers: { host: "evil.example" } })).statusCode, 403);
   assert.equal((await call(createApplication({ ...appOptions, localPort: 8787 }), "/api/health", { method: "GET", socket: { localPort: 11111 } })).statusCode, 200);
-  const preview = await call(app, "/api/batch/preview", { token: owner.token, body: { kind: "daily-month" } });
-  assert.equal(preview.body.dates.length, 30);
-  assert.equal(preview.body.dates.at(-1), "2026-10-18");
+  const monthDates = Array.from({ length: 31 }, (_, index) =>
+    new Date(Date.UTC(2026, 8, 19 + index)).toISOString().slice(0, 10));
+  const preview = await call(app, "/api/batch/preview", { token: owner.token, body: { dates: monthDates } });
+  assert.equal(preview.body.dates.length, 31);
+  assert.equal(preview.body.dates.at(-1), "2026-10-19");
   assert.equal(preview.body.periods.length, 4);
   assert.equal(batchCalls, 0);
-  const semester = await call(app, "/api/batch/preview", { token: owner.token, body: { range: "semester", pattern: "weekends" } });
-  assert.equal(semester.body.dates.length, 41);
-  assert.equal(semester.body.dates.at(-1), "2026-12-20");
+  assert.equal((await call(app, "/api/batch/preview", { token: owner.token, body: { dates: ["2026-10-20"] } })).statusCode, 400);
   const manual = await call(app, "/api/batch/preview", { token: owner.token, body: { dates: ["2026-09-21", "2026-09-20"] } });
   assert.deepEqual(manual.body.dates, ["2026-09-20", "2026-09-21"]);
   const plan = preview.body.plan;
@@ -182,7 +182,7 @@ try {
   clock = new Date("2026-09-20T03:00:00Z");
   assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan, ...ownerCredentials } })).body.job.status, "done");
   assert.equal(batchCalls, 1);
-  const expired = await call(app, "/api/batch/preview", { token: owner.token, body: { kind: "weekends-week" } });
+  const expired = await call(app, "/api/batch/preview", { token: owner.token, body: { dates: ["2026-09-20"] } });
   clock = new Date(clock.getTime() + 600_001);
   assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan: expired.body.plan, ...ownerCredentials } })).statusCode, 409);
 
@@ -219,9 +219,9 @@ try {
   reopened.delete(owner.id);
   assert.equal(reopened.job(owner.id), null);
   reopened.close();
-  assert.equal(batchDatesFrom({ kind: "daily-month" }, koreaNow(new Date("2026-09-19T14:30:00Z"))).length, 29);
-  assert.equal(batchDatesFrom({ kind: "weekends-term" }, new Date(2026, 2, 1, 12)).at(-1), "2026-06-28");
-  console.log("service checks passed: credentials, HTTP guards, fixed preview, batch isolation/replay/recovery, uncertain saves, rate limits, Korea dates");
+  assert.equal(batchDatesFrom({ dates: monthDates }, koreaNow(new Date("2026-09-19T14:30:00Z"))).length, 30);
+  assert.throws(() => batchDatesFrom({ dates: ["2026-10-20"] }, new Date(2026, 8, 19, 12)), /31일/);
+  console.log("service checks passed: credentials, HTTP guards, 31-day preview, batch isolation/replay/recovery, uncertain saves, rate limits, Korea dates");
 } finally {
   rmSync(directory, { recursive: true, force: true });
 }

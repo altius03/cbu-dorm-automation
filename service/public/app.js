@@ -19,7 +19,6 @@ const submitButton = document.querySelector("#submit-selection");
 const cancelButton = document.querySelector("#cancel-job");
 const refreshButton = document.querySelector("#refresh-data");
 const reconcileButton = document.querySelector("#reconcile-job");
-const scheduleMeta = document.querySelector("#schedule-meta");
 const holidayMeta = document.querySelector("#holiday-meta");
 const historyList = document.querySelector("#history-list");
 const historyEmpty = document.querySelector("#history-empty");
@@ -28,7 +27,7 @@ const deleteButton = document.querySelector("#delete-account");
 
 const state = {
   today: "",
-  horizons: [],
+  maxSelectionDays: 31,
   holidays: [],
   viewYear: 0,
   viewMonth: 0,
@@ -137,12 +136,15 @@ function setBusy(busy) {
 }
 
 function activeDates() {
-  if (manualMode.checked) return [...state.manualDates].filter(date => !hasApplication(date)).sort();
-  const horizon = state.horizons.find(item => item.id === checkedValue("range") && item.available);
-  if (!horizon || !state.today || horizon.end < state.today) return [];
+  if (!state.today) return [];
+  if (manualMode.checked) return [...state.manualDates]
+    .filter(date => state.today <= date && date <= maxSelectableDate() && !hasApplication(date))
+    .sort();
+  const days = Number(checkedValue("range"));
+  if (![7, 14, state.maxSelectionDays].includes(days)) return [];
   const pattern = checkedValue("pattern");
   const weekdays = new Set(selectedWeekdays());
-  return datesBetween(state.today, horizon.end).filter(value => {
+  return datesBetween(state.today, addDays(state.today, days - 1)).filter(value => {
     const day = dateAt(value).getUTCDay();
     if (pattern === "daily") return true;
     if (pattern === "weekdays") return day >= 1 && day <= 5 && !holidayFor(value);
@@ -152,7 +154,7 @@ function activeDates() {
 }
 
 function maxSelectableDate() {
-  return state.horizons.filter(item => item.available).map(item => item.end).sort().at(-1) || addDays(state.today, 365);
+  return addDays(state.today, state.maxSelectionDays - 1);
 }
 
 function jobMarks() {
@@ -243,10 +245,7 @@ function updateSelection() {
 
 function updateControls() {
   const blocked = actionBusy || batchRunning || unresolvedJob;
-  for (const control of requestForm.querySelectorAll("input, button")) {
-    const unavailableRange = control.name === "range" && !state.horizons.some(item => item.id === control.value && item.available);
-    control.disabled = blocked || unavailableRange;
-  }
+  for (const control of requestForm.querySelectorAll("input, button")) control.disabled = blocked;
   for (const control of loginForm.querySelectorAll("input, button")) control.disabled = actionBusy;
   refreshButton.disabled = actionBusy || checkingJob;
   const canReconcile = state.activeJob?.status !== "running" && countStatuses(state.activeJob).unknown > 0;
@@ -286,23 +285,12 @@ async function api(path, options = {}) {
 
 function configureSession(session) {
   state.today = session.today;
-  state.horizons = session.horizons || [];
+  state.maxSelectionDays = Number.isInteger(session.maxSelectionDays) ? session.maxSelectionDays : 31;
   state.holidays = session.holidays || [];
+  state.manualDates.clear();
   const today = dateAt(state.today);
   state.viewYear = today.getUTCFullYear();
   state.viewMonth = today.getUTCMonth();
-  for (const label of document.querySelectorAll("[data-horizon]")) {
-    const horizon = state.horizons.find(item => item.id === label.dataset.horizon);
-    label.textContent = horizon ? `${horizon.end}까지` : "일정 미공지";
-    const input = label.closest("label")?.querySelector("input");
-    if (input) input.disabled = !horizon?.available;
-  }
-  const schedule = state.horizons[0];
-  scheduleMeta.textContent = schedule
-    ? `${schedule.term} · ${String(schedule.updatedAt || "").slice(0, 10)} 갱신 · ${schedule.source}`
-    : "현재 적용할 수 있는 생활관 일정이 없습니다.";
-  const checkedRange = document.querySelector('input[name="range"]:checked');
-  if (checkedRange?.disabled) document.querySelector('input[name="range"]:not(:disabled)')?.click();
   updateSelection();
 }
 
