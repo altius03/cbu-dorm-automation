@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "TUK 외박신청",
+  "version": "0.1.0",
+  "description": "로그인된 한국공학대학교 통합정보시스템에서 날짜만으로 외박을 신청합니다.",
+  "permissions": ["activeTab", "scripting"],
+  "action": {
+    "default_title": "TUK 외박신청",
+    "default_popup": "popup.html"
+  }
+}
