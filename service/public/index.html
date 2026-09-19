@@ -33,7 +33,6 @@
       .login-brand strong { font-size: 20px; }
       .login-brand small { margin-left: 4px; color: #8b7343; font-size: 11px; font-weight: 700; }
       .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .04em; }
-      .brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: white; background: var(--blue); }
       h1, h2, p { margin-top: 0; }
       h1 { margin-bottom: 9px; font-size: clamp(25px, 5vw, 32px); letter-spacing: -.04em; }
       h2 { margin-bottom: 4px; font-size: 18px; letter-spacing: -.02em; }
@@ -57,7 +56,9 @@
       .club-link:hover { background: #edf0f6; }
       .app-shell { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 26px 0 60px; }
       .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
-      .app-header .brand { margin: 0; }
+      .app-header .brand { margin: 0; color: var(--ink); font-size: 18px; letter-spacing: -.02em; }
+      .app-header .club-mark { width: 36px; height: 36px; }
+      .app-header .brand small { margin-left: 4px; color: #8b7343; font-size: 10px; letter-spacing: 0; }
       .account-menu { position: relative; }
       .account-menu summary { padding: 10px 13px; border-radius: 10px; color: #475467; background: #fff; font-weight: 700; list-style: none; cursor: pointer; }
       .account-menu summary::-webkit-details-marker { display: none; }
@@ -162,19 +163,7 @@
       <section id="login-section" class="login-shell" hidden>
         <div class="login-card">
           <div class="login-brand">
-            <svg class="club-mark" viewBox="0 0 64 64" aria-hidden="true">
-              <path fill="#93c96f" d="M9 22V4l19 11 4-7 4 7L55 4v18Z" />
-              <path fill="#8b7343" d="M32 7C18 7 9 16 9 30v14c0 11 10 18 23 18s23-7 23-18V30C55 16 46 7 32 7Z" />
-              <ellipse cx="21" cy="27" rx="14" ry="13" fill="white" />
-              <ellipse cx="43" cy="27" rx="14" ry="13" fill="white" />
-              <circle cx="22" cy="27" r="6" fill="#8b7343" />
-              <circle cx="42" cy="27" r="6" fill="#8b7343" />
-              <circle cx="20" cy="25" r="2" fill="white" />
-              <circle cx="40" cy="25" r="2" fill="white" />
-              <ellipse cx="32" cy="47" rx="15" ry="13" fill="white" />
-              <path fill="#ffed61" d="m32 28 6 6-6 6-6-6Z" />
-              <path d="m23 47 3 3 3-3m3 0 3 3 3-3" fill="none" stroke="#8b7343" stroke-linecap="round" stroke-width="2.5" />
-            </svg>
+            <img class="club-mark" src="/cbu-owl.svg" alt="" />
             <div><strong>외박신청</strong><small>by cbu</small></div>
           </div>
           <h1>외박신청을 더 간단하게</h1>
@@ -203,7 +192,7 @@
 
       <section id="app-section" class="app-shell" hidden>
         <header class="app-header">
-          <div class="brand"><span class="brand-mark">T</span> 외박신청</div>
+          <div class="brand"><img class="club-mark" src="/cbu-owl.svg" alt="" /><span>외박신청<small>by cbu</small></span></div>
           <details class="account-menu">
             <summary>계정 설정</summary>
             <div class="account-popover">

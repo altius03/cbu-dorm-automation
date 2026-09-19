@@ -5,12 +5,18 @@ import { fileURLToPath } from "node:url";
 
 const htmlUrl = new URL("./public/index.html", import.meta.url);
 const scriptUrl = new URL("./public/app.js", import.meta.url);
+const owlUrl = new URL("./public/cbu-owl.svg", import.meta.url);
 const html = readFileSync(htmlUrl, "utf8");
 const script = readFileSync(scriptUrl, "utf8");
+const owl = readFileSync(owlUrl, "utf8");
 
 assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
 assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
+assert.equal(html.match(/src="\/cbu-owl\.svg"/g)?.length, 2);
+assert.match(html, /<header class="app-header">[\s\S]*class="club-mark"[\s\S]*외박신청<small>by cbu<\/small>/);
+assert.doesNotMatch(html, /brand-mark|<span class="brand-mark">T<\/span>/);
+assert.match(owl, /<svg[\s\S]*viewBox="0 0 64 64"[\s\S]*#93c96f[\s\S]*#8b7343/);
 assert.match(html, /<strong>외박신청<\/strong><small>by cbu<\/small>/);
 assert.match(html, /.login-brand strong \{ font-size: 20px; \}/);
 assert.match(html, /<label for="student-id">포털 아이디<\/label>/);
