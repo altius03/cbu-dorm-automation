@@ -28,8 +28,10 @@
       .login-shell { width: min(440px, calc(100% - 32px)); margin: 0 auto; padding: 10vh 0 48px; }
       .login-card, .panel { border: 1px solid var(--line); border-radius: 20px; background: #fff; box-shadow: 0 10px 32px rgba(31, 42, 68, .07); }
       .login-card { padding: 32px; }
-      .login-brand { margin-bottom: 22px; }
+      .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
       .club-mark { width: 52px; height: 52px; flex: none; }
+      .login-brand strong { font-size: 17px; }
+      .login-brand small { margin-left: 4px; color: #8b7343; font-size: 11px; font-weight: 700; }
       .login-lead { margin-bottom: 4px; font-size: 14px; }
       .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .04em; }
       .brand-mark { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: white; background: var(--blue); }
@@ -175,6 +177,7 @@
               <path fill="#ffed61" d="m32 28 6 6-6 6-6-6Z" />
               <path d="m23 47 3 3 3-3m3 0 3 3 3-3" fill="none" stroke="#8b7343" stroke-linecap="round" stroke-width="2.5" />
             </svg>
+            <div><strong>외박신청</strong><small>by cbu</small></div>
           </div>
           <h1>외박신청을 더 간단하게</h1>
           <p class="login-lead">날짜만 고르면 나머지는 자동으로 처리해요.</p>
