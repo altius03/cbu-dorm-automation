@@ -10,8 +10,9 @@ const script = readFileSync(scriptUrl, "utf8");
 
 assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
-assert.match(html, /씨부엉이 만들었어요[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
-assert.match(html, /class="club-mark"[\s\S]*비밀번호는 저장하지 않아요/);
+assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
+assert.doesNotMatch(html, /씨부엉이 만들었어요|한국공학대학교 개발동아리/);
+assert.match(html, /비밀번호는 저장하지 않아요/);
 assert.doesNotMatch(html, /TUK DORM|외박신청 로그인/);
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /31일 이내 선택 가능/);
