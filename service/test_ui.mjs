@@ -17,7 +17,7 @@ assert.match(html, /id="mode-auto"[^>]*checked/);
 assert.doesNotMatch(html, /id="mode-manual"[^>]*checked/);
 assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: fixed/);
 assert.match(html, /학교 신청내역[\s\S]*확인 필요[\s\S]*제외·미처리/);
-assert.match(html, /id="reconcile-job"[\s\S]*달력 직접 선택[\s\S]*자동 선택/);
+assert.match(html, /id="reconcile-job"[\s\S]*자동 선택[\s\S]*달력 직접 선택/);
 assert.match(html, /id="holiday-meta"[\s\S]*공휴일을 제외한/);
 assert.doesNotMatch(html, /최근 신청 결과|history-list|history-item/);
 assert.doesNotMatch(html, /저장된 계정 다시 연결|계정 연결|학기 퇴관|6개월 퇴관|12개월 퇴관|schedule-meta/);
