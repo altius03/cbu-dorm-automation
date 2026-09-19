@@ -50,8 +50,8 @@ Vercel Production Secret에만 저장하고 공개 접두사를 붙이지 않습
 ## 공휴일 동기화
 
 `cloud/vercel.json`은 매일 UTC 18시(한국시간 다음 날 03시대)에 `/api/cron/holidays`를 호출합니다.
-현재 연도와 다음 연도의 공휴일을 공공데이터포털에서 읽어
-`overnight_private.public_holidays`에 한 트랜잭션으로 교체합니다. 24개월 중 하나라도 조회에 실패하면
+현재 연도와 다음 연도의 공휴일을 공공데이터포털에서 연도별 1회씩 읽어
+`overnight_private.public_holidays`에 한 트랜잭션으로 교체합니다. 두 연도 중 하나라도 조회에 실패하면
 기존 데이터는 유지됩니다. Vercel Hobby에서는 지정한 한 시간 안에서 실행 시각이 달라질 수 있습니다.
 
 1. 공공데이터포털에서 `한국천문연구원_특일 정보` 활용신청을 완료합니다.

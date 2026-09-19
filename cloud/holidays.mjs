@@ -37,10 +37,10 @@ export function parseHolidayResponse(xml) {
   return [...holidays].map(([date, names]) => ({ date, name: [...names].join(" / ") }));
 }
 
-async function fetchMonth(fetchImpl, serviceKey, year, month) {
+async function fetchYear(fetchImpl, serviceKey, year) {
   const url = new URL(endpoint);
   for (const [name, value] of Object.entries({
-    serviceKey, solYear: String(year), solMonth: String(month).padStart(2, "0"), numOfRows: "100", pageNo: "1",
+    serviceKey, solYear: String(year), numOfRows: "100", pageNo: "1",
   })) url.searchParams.set(name, value);
   try {
     const response = await fetchImpl(url, { headers: { Accept: "application/xml" }, signal: AbortSignal.timeout(10_000) });
@@ -57,7 +57,7 @@ export async function syncPublicHolidays(store, { serviceKey, now = new Date(), 
   if (key.length < 10 || key.length > 500 || typeof store?.replaceHolidays !== "function") throw new Error("공휴일 동기화 설정을 확인해 주세요.");
   const year = Number(new Intl.DateTimeFormat("en", { timeZone: "Asia/Seoul", year: "numeric" }).format(now));
   const years = [year, year + 1];
-  const batches = await Promise.all(years.flatMap(value => Array.from({ length: 12 }, (_, month) => fetchMonth(fetchImpl, key, value, month + 1))));
+  const batches = await Promise.all(years.map(value => fetchYear(fetchImpl, key, value)));
   const byDate = new Map();
   for (const holiday of batches.flat()) byDate.set(holiday.date, { ...holiday, source: HOLIDAY_SOURCE });
   const holidays = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
