@@ -3,5 +3,6 @@
   "framework": null,
   "installCommand": "npm ci --ignore-scripts --no-fund",
   "buildCommand": "npm run build",
+  "regions": ["icn1"],
   "fluid": true
 }
