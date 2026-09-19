@@ -14,6 +14,7 @@ const knownRoutes = new Set([
   "/", "/app.js", "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect", "/api/claim",
   "/api/logout", "/api/account", "/api/applications", "/api/check", "/api/apply", "/api/batch/job",
   "/api/batch/history", "/api/batch/preview", "/api/batch/apply", "/api/batch/cancel", "/api/batch/reconcile",
+  "/api/cron/holidays",
 ]);
 
 function sendJson(response, status, value) {
@@ -78,12 +79,14 @@ export function createApplication({
   setupToken = "", publicOrigin = "", secureCookie = false, now = () => new Date(),
   logger = entry => console.log(JSON.stringify(entry)),
   publicRegistration = false,
+  holidaySync = null, cronSecret = "",
   clientAddress = request => request.socket.remoteAddress,
   localPort,
   page = readFileSync(join(here, "public", "index.html")),
   script = readFileSync(join(here, "public", "app.js")),
 }) {
   if (setupToken && setupToken.length < 32) throw new Error("계정 연결 토큰은 32자 이상이어야 합니다.");
+  if (cronSecret && cronSecret.length < 32) throw new Error("CRON_SECRET은 32자 이상이어야 합니다.");
   if (localPort !== undefined && (!Number.isInteger(localPort) || localPort < 1 || localPort > 65535)) throw new Error("개발 서버 포트를 확인해 주세요.");
   if (publicOrigin && (new URL(publicOrigin).protocol !== "https:" || new URL(publicOrigin).origin !== publicOrigin)) {
     throw new Error("OVERNIGHT_PUBLIC_ORIGIN에는 경로 없는 HTTPS 주소를 설정해 주세요.");
@@ -102,6 +105,15 @@ export function createApplication({
     today,
     store.schedules ? await measure(phases, "scheduleMs", () => store.schedules()) : undefined,
   );
+  const currentContext = async (today, phases) => {
+    const [horizons, holidays] = await Promise.all([
+      currentHorizons(today, phases),
+      store.holidays
+        ? measure(phases, "holidayMs", () => store.holidays(today, `${Number(today.slice(0, 4)) + 1}-12-31`))
+        : [],
+    ]);
+    return { today, horizons, holidays };
+  };
   const cookie = (token, maxAge = 31_536_000) => [
     sessionCookieName + "=" + token, "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=" + maxAge, secureCookie ? "Secure" : "",
   ].filter(Boolean).join("; ");
@@ -237,12 +249,18 @@ export function createApplication({
       await measure(phases, "databaseMs", () => store.health ? store.health() : store.database.prepare("SELECT 1").get());
       return sendJson(response, 200, { ok: true });
     }
+    if (request.method === "GET" && url.pathname === "/api/cron/holidays") {
+      const supplied = Buffer.from(String(request.headers.authorization || ""));
+      const expected = Buffer.from(`Bearer ${cronSecret}`);
+      if (!holidaySync || !cronSecret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+        throw new HttpError(401, "공휴일 동기화 요청을 인증할 수 없습니다.");
+      }
+      return sendJson(response, 200, await withBusy("holiday-sync", holidaySync));
+    }
     await limit(request, ["/api/login", "/api/register", "/api/reconnect", "/api/claim"].includes(url.pathname));
     if (request.method === "GET" && url.pathname === "/api/session") {
       const today = localIsoDate(koreaNow(now()));
-      return sendJson(response, 200, {
-        connected: false, today, horizons: await currentHorizons(today, phases),
-      });
+      return sendJson(response, 200, { connected: false, ...await currentContext(today, phases) });
     }
     if (request.method === "GET" && url.pathname === "/api/batch/job") {
       const profile = await requireProfile(request);
@@ -325,7 +343,7 @@ export function createApplication({
       response.setHeader("Set-Cookie", cookie(login.profile.token));
       const today = localIsoDate(koreaNow(now()));
       return sendJson(response, 201, {
-        connected: true, today, horizons: await currentHorizons(today, phases), createdAt: login.profile.createdAt,
+        connected: true, ...await currentContext(today, phases), createdAt: login.profile.createdAt,
         applications: login.applications, applicationsError: login.applicationsError,
         jobs: await measure(phases, "databaseMs", () => store.jobs(login.profile.id)),
       });

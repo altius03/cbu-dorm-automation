@@ -76,6 +76,9 @@
       .day.is-today { border-color: #8ea5ff; }
       .day.is-selected { color: white; background: var(--blue); }
       .day.is-past { color: #b4bac4; }
+      .day.is-holiday:not(.is-selected) { color: var(--red); }
+      .day.is-holiday::before { position: absolute; top: 4px; right: 5px; content: "휴"; color: var(--red); font-size: 9px; font-weight: 900; }
+      .day.is-holiday.is-selected::before { color: white; }
       .day.has-application { box-shadow: inset 0 0 0 2px #4f78ff; }
       .day.status-saved { box-shadow: inset 0 0 0 2px #1b9a5a; background: #eaf8f0; color: #096b3b; }
       .day.status-exists { box-shadow: inset 0 0 0 2px #4f78ff; background: #edf2ff; color: #234bbd; }
@@ -91,6 +94,8 @@
       .dot.saved { background: #1b9a5a; }
       .dot.portal { border: 2px solid #4f78ff; background: white; }
       .dot.check { background: #e09a29; }
+      .dot.holiday { background: var(--red); }
+      #holiday-meta { margin: 12px 2px 0; color: var(--red); font-size: 12px; line-height: 1.5; }
       fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
       legend { margin-bottom: 10px; }
       .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 22px; padding: 4px; border-radius: 12px; background: #edf0f4; }
@@ -203,8 +208,10 @@
               <span><i class="dot saved"></i>완료</span>
               <span><i class="dot portal"></i>학교 신청내역</span>
               <span><i class="dot check"></i>확인 필요</span>
+              <span><i class="dot holiday"></i>공휴일</span>
               <span><i class="dot"></i>제외·미처리</span>
             </div>
+            <p id="holiday-meta" hidden></p>
           </section>
 
           <section class="panel control-panel" aria-labelledby="request-heading">
@@ -234,7 +241,7 @@
                   <legend>어떤 날을</legend>
                   <div class="choice-list">
                     <label class="choice"><input type="radio" name="pattern" value="daily" /><span><strong>매일</strong><small>최대 7박 8일씩 묶어서</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekdays" /><span><strong>평일 전체</strong><small>월요일부터 금요일까지 묶어서</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekdays" /><span><strong>평일 전체</strong><small>공휴일을 제외한 월요일부터 금요일까지</small></span></label>
                     <label class="choice"><input type="radio" name="pattern" value="weekends" checked /><span><strong>주말 전체</strong><small>금요일부터 일요일까지 묶어서</small></span></label>
                     <label class="choice"><input type="radio" name="pattern" value="custom" /><span><strong>지정 요일</strong><small>원하는 요일만 반복</small></span></label>
                   </div>

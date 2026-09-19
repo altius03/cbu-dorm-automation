@@ -4,5 +4,6 @@
   "installCommand": "npm ci --ignore-scripts --no-fund",
   "buildCommand": "npm run build",
   "regions": ["icn1"],
-  "fluid": true
+  "fluid": true,
+  "crons": [{ "path": "/api/cron/holidays", "schedule": "0 18 * * *" }]
 }

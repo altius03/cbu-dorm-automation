@@ -20,6 +20,7 @@ const cancelButton = document.querySelector("#cancel-job");
 const refreshButton = document.querySelector("#refresh-data");
 const reconcileButton = document.querySelector("#reconcile-job");
 const scheduleMeta = document.querySelector("#schedule-meta");
+const holidayMeta = document.querySelector("#holiday-meta");
 const historyList = document.querySelector("#history-list");
 const historyEmpty = document.querySelector("#history-empty");
 const logoutButton = document.querySelector("#logout");
@@ -28,6 +29,7 @@ const deleteButton = document.querySelector("#delete-account");
 const state = {
   today: "",
   horizons: [],
+  holidays: [],
   viewYear: 0,
   viewMonth: 0,
   manualDates: new Set(),
@@ -106,6 +108,10 @@ function hasApplication(iso) {
   return state.applications.some(item => item.active && item.start <= iso && iso <= item.end);
 }
 
+function holidayFor(iso) {
+  return state.holidays.find(item => item.date === iso);
+}
+
 function setConnected(connected) {
   loginSection.hidden = connected;
   appSection.hidden = !connected;
@@ -139,7 +145,7 @@ function activeDates() {
   return datesBetween(state.today, horizon.end).filter(value => {
     const day = dateAt(value).getUTCDay();
     if (pattern === "daily") return true;
-    if (pattern === "weekdays") return day >= 1 && day <= 5;
+    if (pattern === "weekdays") return day >= 1 && day <= 5 && !holidayFor(value);
     if (pattern === "weekends") return day === 0 || day === 5 || day === 6;
     return pattern === "custom" && weekdays.has(day);
   }).filter(date => !hasApplication(date));
@@ -172,6 +178,12 @@ function renderCalendar() {
   const startOffset = first.getUTCDay();
   const daysInMonth = new Date(Date.UTC(state.viewYear, state.viewMonth + 1, 0)).getUTCDate();
   monthTitle.textContent = `${state.viewYear}년 ${state.viewMonth + 1}월`;
+  const prefix = `${state.viewYear}-${String(state.viewMonth + 1).padStart(2, "0")}-`;
+  const monthHolidays = state.holidays.filter(item => item.date.startsWith(prefix));
+  holidayMeta.textContent = monthHolidays.length
+    ? `공휴일 · ${monthHolidays.map(item => `${Number(item.date.slice(8))}일 ${item.name}`).join(" · ")}`
+    : "";
+  holidayMeta.hidden = monthHolidays.length === 0;
   calendarGrid.replaceChildren();
 
   for (let index = 0; index < 42; index++) {
@@ -185,6 +197,7 @@ function renderCalendar() {
     const iso = `${state.viewYear}-${String(state.viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const button = document.createElement("button");
     const application = hasApplication(iso);
+    const holiday = holidayFor(iso);
     const mark = marks.get(iso);
     button.type = "button";
     button.className = "day";
@@ -194,13 +207,16 @@ function renderCalendar() {
     if (iso < state.today) button.classList.add("is-past");
     if (selected.has(iso)) button.classList.add("is-selected");
     if (application) button.classList.add("has-application");
+    if (holiday) button.classList.add("is-holiday");
     if (mark) button.classList.add(`status-${mark}`);
     button.dataset.mark = mark === "saved" ? "✓" : mark === "unknown" ? "!" : mark ? "–" : application ? "●" : "";
     const labels = [`${state.viewMonth + 1}월 ${day}일`];
     if (selected.has(iso)) labels.push("선택됨");
     if (application) labels.push("학교 신청내역 있음");
+    if (holiday) labels.push(holiday.name);
     if (mark) labels.push(statusNames[mark] || "결과 확인 필요");
     button.setAttribute("aria-label", labels.join(", "));
+    if (holiday) button.title = holiday.name;
     button.setAttribute("aria-pressed", String(selected.has(iso)));
     button.disabled = iso < state.today || iso > maxSelectableDate() || application || autoMode.checked || actionBusy || batchRunning || unresolvedJob;
     button.addEventListener("click", () => {
@@ -271,6 +287,7 @@ async function api(path, options = {}) {
 function configureSession(session) {
   state.today = session.today;
   state.horizons = session.horizons || [];
+  state.holidays = session.holidays || [];
   const today = dateAt(state.today);
   state.viewYear = today.getUTCFullYear();
   state.viewMonth = today.getUTCMonth();

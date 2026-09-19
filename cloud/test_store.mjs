@@ -10,6 +10,7 @@ const migrations = [
   "./supabase/migrations/20260919135500_residency_schedules.sql",
   "./supabase/migrations/20260919142047_allow_passwordless_profiles.sql",
   "./supabase/migrations/20260919142049_drop_stored_credentials.sql",
+  "./supabase/migrations/20260919144058_add_public_holidays.sql",
 ];
 const migrationSource = () => migrations.map(path => readFileSync(new URL(path, import.meta.url), "utf8"))
   .join("\n").replace(/^(?:BEGIN|COMMIT);$/gm, "");
@@ -101,8 +102,17 @@ if (!url) {
     assert.equal(await store.job(other.id, jobId), null);
 
     assert.equal((await store.schedules()).find(item => item.term === "2026-2").ends.semester, "2026-12-23");
+    assert.equal(await store.replaceHolidays(2026, 2027, [
+      { date: "2026-10-03", name: "개천절", source: "fixture" },
+      { date: "2027-01-01", name: "신정", source: "fixture" },
+    ]), 2);
+    assert.deepEqual((await store.holidays("2026-09-19", "2026-12-31")).map(item => [item.date, item.name]), [["2026-10-03", "개천절"]]);
+    await assert.rejects(store.replaceHolidays(2026, 2027, [
+      { date: "2026-10-03", name: "중복", source: "fixture" },
+      { date: "2026-10-03", name: "중복", source: "fixture" },
+    ]), /형식/);
     const policies = await sql.unsafe(`SELECT c.relrowsecurity, c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${schema}' AND c.relkind = 'r'`);
-    assert.equal(policies.length, 7);
+    assert.equal(policies.length, 8);
     assert.ok(policies.every(row => row.relrowsecurity && row.relforcerowsecurity));
     await assert.rejects(sql.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE "${deniedRole}"`);
@@ -123,7 +133,7 @@ if (!url) {
     assert.equal(await store.delete(owner.id), true);
     assert.deepEqual(await store.jobs(owner.id), []);
     await restrictedMigration(sql, url);
-    console.log("cloud store checks passed: passwordless profiles, private RLS schema, recovery, atomic rate and locks");
+    console.log("cloud store checks passed: passwordless profiles, private RLS schema, holidays, recovery, atomic rate and locks");
   } finally {
     await appSql.end({ timeout: 5 });
     await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

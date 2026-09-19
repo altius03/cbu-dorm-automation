@@ -2,6 +2,7 @@ import { isIP } from "node:net";
 import html from "../service/public/index.html" with { type: "text" };
 import script from "../service/public/app.js" with { type: "text" };
 import { createApplication } from "../service/server.mjs";
+import { syncPublicHolidays } from "./holidays.mjs";
 import { getStore } from "./runtime.mjs";
 
 let app;
@@ -17,6 +18,8 @@ export default async function handler(request, response) {
         localPort: !process.env.VERCEL && process.env.NODE_ENV === "development" ? Number(process.env.PORT || 8789) : undefined,
         publicRegistration: process.env.OVERNIGHT_PUBLIC_REGISTRATION === "1",
         setupToken: process.env.OVERNIGHT_SETUP_TOKEN || "",
+        cronSecret: process.env.CRON_SECRET || "",
+        holidaySync: () => syncPublicHolidays(store, { serviceKey: process.env.DATA_GO_KR_SERVICE_KEY || "" }),
         page: Buffer.from(html),
         script: Buffer.from(script),
         clientAddress: req => {

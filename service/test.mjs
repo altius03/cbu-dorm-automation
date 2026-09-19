@@ -108,6 +108,7 @@ try {
   await assert.rejects(portal.applyMany(["20990101", "20990101"]), /겹치는/);
 
   const httpStore = new CredentialStore(join(directory, "http"));
+  httpStore.holidays = () => [{ date: "2026-10-03", name: "개천절", source: "fixture", updatedAt: "2026-09-19T00:00:00.000Z" }];
   const ownerCredentials = { studentId: "owner0001", password: "fake-password" };
   const otherCredentials = { studentId: "other0002", password: "fake-password" };
   const owner = httpStore.create(ownerCredentials);
@@ -137,6 +138,17 @@ try {
   assert.equal((await call(app, "/api/session", { method: "GET", headers: { host: "evil.example" } })).statusCode, 403);
   assert.equal((await call(app, "/api/batch/preview")).statusCode, 401);
   assert.equal((await call(app, "/api/health", { method: "GET" })).body.ok, true);
+  const context = await call(app, "/api/session", { method: "GET" });
+  assert.deepEqual(context.body.holidays.map(item => item.date), ["2026-10-03"]);
+  let holidayRuns = 0;
+  const cron = createApplication({
+    ...appOptions, cronSecret: "fixture-cron-secret-".repeat(2),
+    holidaySync: async () => ({ count: ++holidayRuns, years: [2026, 2027] }),
+  });
+  assert.equal((await call(cron, "/api/cron/holidays", { method: "GET" })).statusCode, 401);
+  const synced = await call(cron, "/api/cron/holidays", { method: "GET", headers: { authorization: `Bearer ${"fixture-cron-secret-".repeat(2)}` } });
+  assert.equal(synced.statusCode, 200);
+  assert.equal(synced.body.count, 1);
   const proxied = createApplication({ ...appOptions, publicOrigin: "https://overnight.example" });
   assert.equal((await call(proxied, "/api/health", { method: "GET", socket: {}, headers: { host: "overnight.example" } })).statusCode, 200);
   assert.equal((await call(proxied, "/api/health", { method: "GET", socket: {}, headers: { host: "evil.example" } })).statusCode, 403);

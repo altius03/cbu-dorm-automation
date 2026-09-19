@@ -44,7 +44,7 @@ export class PostgresStore {
     this.sql = sql;
     this.key = Buffer.isBuffer(key) ? decodeKey(key.toString("base64")) : decodeKey(key);
     this.schema = schema;
-    this.t = Object.fromEntries(["key_guard", "profiles", "used_setup_tokens", "batch_jobs", "rate_limits", "busy_locks", "residency_schedules"].map(name => [name, `"${schema}"."${name}"`]));
+    this.t = Object.fromEntries(["key_guard", "profiles", "used_setup_tokens", "batch_jobs", "rate_limits", "busy_locks", "residency_schedules", "public_holidays"].map(name => [name, `"${schema}"."${name}"`]));
   }
 
   hash(namespace, value) { return createHmac("sha256", this.key).update(namespace + "\0" + value).digest(); }
@@ -189,6 +189,40 @@ export class PostgresStore {
       ends: { semester: row.semester_end, sixMonths: row.six_month_end, twelveMonths: row.twelve_month_end },
       source: row.source, updatedAt: row.updated_at,
     });
+  }
+  async holidays(from, through) {
+    try { parseIsoDate(from); parseIsoDate(through); }
+    catch { throw new HttpError(400, "공휴일 조회 기간을 확인해 주세요."); }
+    if (through < from) throw new HttpError(400, "공휴일 조회 기간을 확인해 주세요.");
+    return (await this.q(`SELECT holiday_date, name, source, updated_at FROM ${this.t.public_holidays}
+      WHERE holiday_date BETWEEN $1 AND $2 ORDER BY holiday_date`, [from, through])).map(row => ({
+      date: typeof row.holiday_date === "string" ? row.holiday_date : iso(row.holiday_date).slice(0, 10),
+      name: row.name, source: row.source, updatedAt: iso(row.updated_at),
+    }));
+  }
+  async replaceHolidays(fromYear, throughYear, values) {
+    if (!Number.isInteger(fromYear) || !Number.isInteger(throughYear) || fromYear < 2000 || throughYear < fromYear || throughYear > fromYear + 1 || !Array.isArray(values) || values.length > 100) {
+      throw new Error("공휴일 동기화 범위를 확인해 주세요.");
+    }
+    const rows = new Map();
+    for (const value of values) {
+      const date = value?.date;
+      const name = typeof value?.name === "string" ? value.name.trim() : "";
+      const source = typeof value?.source === "string" ? value.source.trim() : "";
+      try { parseIsoDate(date); } catch { throw new Error("공휴일 데이터 형식을 확인해 주세요."); }
+      const year = Number(date.slice(0, 4));
+      if (year < fromYear || year > throughYear || !name || name.length > 100 || !source || source.length > 100 || rows.has(date)) {
+        throw new Error("공휴일 데이터 형식을 확인해 주세요.");
+      }
+      rows.set(date, { date, name, source });
+    }
+    await this.transaction(async tx => {
+      await this.q(`DELETE FROM ${this.t.public_holidays} WHERE holiday_date BETWEEN $1 AND $2`, [`${fromYear}-01-01`, `${throughYear}-12-31`], tx);
+      for (const row of rows.values()) {
+        await this.q(`INSERT INTO ${this.t.public_holidays}(holiday_date, name, source) VALUES ($1, $2, $3)`, [row.date, row.name, row.source], tx);
+      }
+    });
+    return rows.size;
   }
   async reconcileJob(profileId, id, resolutions) {
     if (!validId(profileId) || !validId(id)) return null;
