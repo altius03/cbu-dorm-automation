@@ -10,6 +10,9 @@ const script = readFileSync(scriptUrl, "utf8");
 
 assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
+assert.match(html, /씨부엉이 만들었어요[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
+assert.match(html, /class="club-mark"[\s\S]*비밀번호는 저장하지 않아요/);
+assert.doesNotMatch(html, /TUK DORM|외박신청 로그인/);
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /31일 이내 선택 가능/);
 assert.doesNotMatch(html, /오늘부터 31일 안의 날짜를 선택하세요/);
@@ -49,6 +52,8 @@ assert.match(script, /nextMonthButton\.disabled = false/);
 assert.match(script, /if \(!loadError\) show\(""\)/);
 assert.doesNotMatch(script, /학교 신청내역을 새로 불러왔습니다/);
 assert.match(script, /showLogin\(error\.message, "error"\)/);
+assert.doesNotMatch(script, /학교 포털 계정으로 로그인해 주세요/);
+assert.match(script, /로그인 중…" : "로그인하고 시작하기/);
 assert.match(script, /patternHelp\.textContent = document\.querySelector\('input\[name="pattern"\]:checked'\)\?\.dataset\.help/);
 assert.doesNotMatch(script, /innerHTML|eval\(/);
 

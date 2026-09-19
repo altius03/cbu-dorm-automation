@@ -134,7 +134,7 @@ function credentialBody(value = {}) {
 
 function setBusy(busy) {
   actionBusy = busy;
-  loginButton.textContent = busy && !loginSection.hidden ? "로그인 중…" : "로그인";
+  loginButton.textContent = busy && !loginSection.hidden ? "로그인 중…" : "로그인하고 시작하기";
   updateControls();
 }
 
@@ -552,7 +552,7 @@ try {
   setConnected(session.connected);
   if (session.connected) await loadDashboard();
   else if (claimError) showLogin(claimError.message, "error");
-  else showLogin("학교 포털 계정으로 로그인해 주세요.");
+  else showLogin();
 } catch (error) {
   setConnected(false);
   showLogin(error.message, "error");
