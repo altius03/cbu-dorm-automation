@@ -25,6 +25,12 @@ const holidayMeta = document.querySelector("#holiday-meta");
 const logoutButton = document.querySelector("#logout");
 const deleteButton = document.querySelector("#delete-account");
 const resultLegends = document.querySelectorAll("[data-result]");
+const serviceDialog = document.querySelector("#service-dialog");
+const dialogMark = document.querySelector("#dialog-mark");
+const dialogTitle = document.querySelector("#dialog-title");
+const dialogMessage = document.querySelector("#dialog-message");
+const dialogCancel = document.querySelector("#dialog-cancel");
+const dialogConfirm = document.querySelector("#dialog-confirm");
 
 const state = {
   today: "",
@@ -46,6 +52,7 @@ let cancelRequested = false;
 let requestedJobId;
 let activeCredentials;
 let pollDelay = 3000;
+const notifiedJobs = new Set();
 const pendingKey = "overnight_pending_job";
 try { requestedJobId = sessionStorage.getItem(pendingKey) || undefined; } catch {}
 const linkParameters = new URLSearchParams(location.hash.slice(1));
@@ -61,6 +68,21 @@ function show(message, kind = "") {
 function showLogin(message = "", kind = "") {
   loginStatus.textContent = message;
   loginStatus.dataset.kind = kind;
+}
+
+function openDialog({ title, message, confirmLabel = "확인", cancelLabel = "", kind = "confirm" }) {
+  const mark = kind === "success" ? "✓" : ["warning", "danger"].includes(kind) ? "!" : "";
+  dialogTitle.textContent = title;
+  dialogMessage.textContent = message;
+  dialogMark.textContent = mark;
+  dialogMark.hidden = !mark;
+  dialogCancel.textContent = cancelLabel;
+  dialogCancel.hidden = !cancelLabel;
+  dialogConfirm.textContent = confirmLabel;
+  serviceDialog.dataset.kind = kind;
+  serviceDialog.returnValue = "";
+  serviceDialog.showModal();
+  return new Promise(resolve => serviceDialog.addEventListener("close", () => resolve(serviceDialog.returnValue === "confirm"), { once: true }));
 }
 
 function compactToIso(value) {
@@ -187,7 +209,7 @@ function renderCalendar() {
   const prefix = `${state.viewYear}-${String(state.viewMonth + 1).padStart(2, "0")}-`;
   const monthHolidays = state.holidays.filter(item => item.date.startsWith(prefix));
   holidayMeta.textContent = monthHolidays.length
-    ? `공휴일 · ${monthHolidays.map(item => `${Number(item.date.slice(8))}일 ${item.name}`).join(" · ")}`
+    ? `공휴일: ${monthHolidays.map(item => `${Number(item.date.slice(8))}일 ${item.name}`).join(", ")}`
     : "";
   holidayMeta.hidden = monthHolidays.length === 0;
   for (const legend of resultLegends) {
@@ -247,7 +269,7 @@ function updateSelection() {
   patternHelp.textContent = document.querySelector('input[name="pattern"]:checked')?.dataset.help || "";
   const dates = activeDates();
   selectionSummary.textContent = dates.length
-    ? `${formatDate(dates[0])}부터 ${formatDate(dates.at(-1))}까지 · ${dates.length}일 선택`
+    ? `${formatDate(dates[0])}부터 ${formatDate(dates.at(-1))}까지 ${dates.length}일 선택`
     : manualMode.checked ? "달력에서 날짜를 선택해 주세요." : "신청할 날짜가 없습니다.";
   submitButton.textContent = dates.length ? `선택한 ${dates.length}일 신청하기` : "날짜를 선택해 주세요";
   submitButton.disabled = !dates.length || actionBusy || batchRunning || unresolvedJob;
@@ -311,6 +333,19 @@ function countStatuses(job) {
   return counts;
 }
 
+function showJobResult(job, counts, needsCheck) {
+  const lines = [];
+  if (counts.saved) lines.push(`${counts.saved}개 기간 신청 완료`);
+  if (counts.exists + counts.overlap) lines.push(`${counts.exists + counts.overlap}개 기간 기존 신청으로 제외`);
+  if (counts.not_attempted) lines.push(`${counts.not_attempted}개 기간 미처리`);
+  if (counts.unknown) lines.push(`${counts.unknown}개 기간 확인 필요`);
+  return openDialog({
+    title: needsCheck ? "신청 결과를 확인해 주세요" : "외박 신청이 완료됐어요",
+    message: lines.join("\n") || job.message || "신청 처리가 끝났습니다.",
+    kind: needsCheck ? "warning" : "success",
+  });
+}
+
 function showJob(job, remember = true) {
   const jobRunning = job.status === "running";
   if (remember) {
@@ -325,10 +360,14 @@ function showJob(job, remember = true) {
   const completed = counts.saved + counts.exists + counts.overlap;
   const total = job.results?.length || 0;
   const needsCheck = job.status !== "done" || job.outcome === "partial" || job.outcome === "cancelled";
-  const message = jobRunning
-    ? `${cancelRequested ? "중단 요청됨" : "신청 처리 중"} · ${completed}/${total}개 기간 확인`
-    : `${job.message || "처리가 끝났습니다."} · ${counts.saved}개 기간 완료, ${counts.exists + counts.overlap}개 제외${counts.unknown ? `, ${counts.unknown}개 확인 필요` : ""}`;
-  show(message, jobRunning ? "" : needsCheck ? "error" : "success");
+  if (jobRunning) show(`${cancelRequested ? "중단 요청됨" : "신청 처리 중"} ${completed}/${total}개 기간 확인`);
+  else {
+    show("");
+    if (job.id && !notifiedJobs.has(job.id)) {
+      notifiedJobs.add(job.id);
+      void showJobResult(job, counts, needsCheck);
+    }
+  }
   updateControls();
 }
 
@@ -461,7 +500,13 @@ requestForm.addEventListener("submit", async event => {
   try {
     const preview = await api("/api/batch/preview", { method: "POST", body: JSON.stringify(body) });
     const first = preview.dates[0], last = preview.dates.at(-1);
-    if (!window.confirm(`${first} ~ ${last}\n총 ${preview.dates.length}일을 ${preview.periods.length}개 기간으로 묶어 신청할까요?\n한 기간은 최대 7박 8일이며 기존 신청일은 제외됩니다.`)) return;
+    const confirmed = await openDialog({
+      title: "외박을 신청할까요?",
+      message: `${formatDate(first)}부터 ${formatDate(last)}까지\n${preview.dates.length}일을 ${preview.periods.length}개 기간으로 신청합니다.\n한 기간은 최대 7박 8일이며 기존 신청일은 제외됩니다.`,
+      confirmLabel: "신청하기",
+      cancelLabel: "취소",
+    });
+    if (!confirmed) return;
     setBusy(false);
     await submitJob(preview.plan, preview.id);
   } catch (error) { show(error.message, "error"); }
@@ -532,7 +577,14 @@ logoutButton.addEventListener("click", async () => {
 });
 
 deleteButton.addEventListener("click", async () => {
-  if (!window.confirm("이 서비스의 계정과 작업 기록을 삭제할까요? 학교에 제출된 신청은 유지됩니다.")) return;
+  const confirmed = await openDialog({
+    title: "서비스 기록을 삭제할까요?",
+    message: "이 서비스에 저장된 계정과 작업 기록만 삭제합니다. 학교에 제출된 신청은 유지됩니다.",
+    confirmLabel: "삭제",
+    cancelLabel: "취소",
+    kind: "danger",
+  });
+  if (!confirmed) return;
   setBusy(true);
   try {
     await api("/api/account", { method: "DELETE", body: "{}" });

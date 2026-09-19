@@ -12,7 +12,7 @@ const mascot = readFileSync(mascotUrl);
 
 assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
-assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
+assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간편하게[\s\S]*로그인하고 시작하기/);
 assert.equal(html.match(/src="\/assets\/cbu-sleeping-owl-v2\.png"/g)?.length, 2);
 assert.match(html, /<header class="app-header">[\s\S]*class="club-mark"[\s\S]*외박신청<small>by CBU<\/small>/);
 assert.doesNotMatch(html, /brand-mark|<span class="brand-mark">T<\/span>/);
@@ -27,6 +27,7 @@ assert.doesNotMatch(html, /TUK DORM|외박신청 로그인/);
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /31일 이내 선택 가능/);
 assert.doesNotMatch(html, /오늘부터 31일 안의 날짜를 선택하세요/);
+assert.match(html, /오늘부터 31일 이내의 외박 날짜를 선택하세요\. 연속된 날짜는 최대 7박 8일 단위로 자동 묶어 신청합니다\./);
 assert.match(html, /오늘 포함 7일[\s\S]*오늘 포함 14일[\s\S]*한 달 단위 최대 기간/);
 assert.match(html, /<strong>매일<\/strong>[\s\S]*<strong>평일<\/strong>[\s\S]*<strong>주말<\/strong>[\s\S]*<strong>요일 지정<\/strong>/);
 assert.match(html, /<legend>어떤 날을<\/legend>[\s\S]*<legend>기간<\/legend>/);
@@ -38,6 +39,7 @@ assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: 
 assert.match(html, /\.control-panel \{ order: 1; \}[\s\S]*\.calendar-panel \{ order: 2; \}/);
 assert.match(html, /학교 신청내역[\s\S]*data-result="saved" hidden[\s\S]*data-result="unknown" hidden[\s\S]*data-result="exists overlap not_attempted" hidden/);
 assert.match(html, /#login-status\[data-kind="error"\]/);
+assert.match(html, /<dialog id="service-dialog"[\s\S]*id="dialog-title"[\s\S]*id="dialog-message"[\s\S]*id="dialog-confirm"/);
 assert.match(html, /id="reconcile-job"[\s\S]*자동 선택[\s\S]*달력 직접 선택/);
 assert.match(html, /id="holiday-meta"/);
 assert.doesNotMatch(html, /공휴일을 제외한 월요일부터 금요일까지/);
@@ -62,6 +64,10 @@ assert.match(script, /prevMonthButton\.disabled = viewMonth === state\.today\.sl
 assert.match(script, /nextMonthButton\.disabled = false/);
 assert.match(script, /if \(!loadError\) show\(""\)/);
 assert.doesNotMatch(script, /학교 신청내역을 새로 불러왔습니다/);
+assert.doesNotMatch(html + script, /·/);
+assert.doesNotMatch(script, /window\.confirm/);
+assert.match(script, /function openDialog\([\s\S]*serviceDialog\.showModal\(\)/);
+assert.match(script, /외박 신청이 완료됐어요/);
 assert.match(script, /showLogin\(error\.message, "error"\)/);
 assert.doesNotMatch(script, /학교 포탈 계정으로 로그인해 주세요/);
 assert.match(script, /로그인 중…" : "로그인하고 시작하기/);
