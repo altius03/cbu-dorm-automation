@@ -11,6 +11,7 @@ const script = readFileSync(scriptUrl, "utf8");
 const mascot = readFileSync(mascotUrl);
 
 assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1"/);
+assert.match(html, /<meta name="theme-color" content="#ffffff"/);
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
 assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간편하게[\s\S]*로그인하고 시작하기/);
 assert.equal(html.match(/src="\/assets\/cbu-sleeping-owl-v2\.png"/g)?.length, 2);
@@ -69,6 +70,7 @@ assert.doesNotMatch(script, /window\.confirm/);
 assert.match(script, /function openDialog\([\s\S]*serviceDialog\.showModal\(\)/);
 assert.match(script, /외박 신청이 완료됐어요/);
 assert.match(script, /showLogin\(error\.message, "error"\)/);
+assert.match(script, /const pageColor = connected \? "#f3f5f8" : "#ffffff";[\s\S]*document\.documentElement\.style\.backgroundColor = pageColor;[\s\S]*themeColor\.content = pageColor/);
 assert.doesNotMatch(script, /학교 포탈 계정으로 로그인해 주세요/);
 assert.match(script, /로그인 중…" : "로그인하고 시작하기/);
 assert.match(script, /patternHelp\.textContent = document\.querySelector\('input\[name="pattern"\]:checked'\)\?\.dataset\.help/);
