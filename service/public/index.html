@@ -83,7 +83,10 @@
       .dialog-actions button { width: 100%; }
       #service-dialog[data-kind="danger"] #dialog-confirm { color: white; background: var(--red); }
       .workspace { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .8fr); gap: 18px; align-items: start; }
+      .side-column { display: grid; gap: 18px; align-content: start; }
       .panel { padding: 22px; }
+      .club-panel { padding: 18px 20px; }
+      .club-panel .club-link { margin: 0; padding: 0; font-size: 13px; }
       .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
       .panel-heading p { margin: 0; font-size: 13px; }
       .calendar-toolbar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; }
@@ -148,9 +151,11 @@
       @media (max-width: 760px) {
         .app-shell { width: 100%; padding: 18px 14px 110px; }
         .workspace { grid-template-columns: 1fr; }
+        .side-column { display: contents; }
         .panel { padding: 18px 14px; border-radius: 16px; }
         .control-panel { order: 1; }
         .calendar-panel { order: 2; }
+        .club-panel { order: 3; }
         .pattern-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .pattern-options .choice, .range-options .choice { min-height: 44px; align-items: center; justify-content: center; gap: 0; padding: 0 8px; text-align: center; }
         .pattern-options .choice input, .range-options .choice input { position: absolute; opacity: 0; }
@@ -251,9 +256,10 @@
             <p id="holiday-meta" hidden></p>
           </section>
 
-          <section class="panel control-panel" aria-labelledby="request-heading">
-            <h2 id="request-heading">어떻게 선택할까요?</h2>
-            <form id="request-form">
+          <div class="side-column">
+            <section class="panel control-panel" aria-labelledby="request-heading">
+              <h2 id="request-heading">어떻게 선택할까요?</h2>
+              <form id="request-form">
               <div class="mode-tabs" role="group" aria-label="날짜 선택 방식">
                 <label><input id="mode-auto" type="radio" name="mode" value="auto" checked /><span>자동 선택</span></label>
                 <label><input id="mode-manual" type="radio" name="mode" value="manual" /><span>달력 직접 선택</span></label>
@@ -299,8 +305,20 @@
                 <button id="submit-selection" class="primary" type="submit" disabled>날짜를 선택해 주세요</button>
                 <button id="cancel-job" class="danger" type="button" hidden>남은 신청 중단</button>
               </div>
-            </form>
-          </section>
+              </form>
+            </section>
+
+            <aside class="panel club-panel" aria-label="CBU 인스타그램">
+              <a class="club-link" href="https://www.instagram.com/tukorea_cbu/" target="_blank" rel="noopener noreferrer" aria-label="한국공학대 개발동아리 CBU 인스타그램">
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="5" />
+                  <circle cx="12" cy="12" r="4" />
+                  <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+                </svg>
+                <span>한국공학대 개발동아리 CBU <span class="external-arrow" aria-hidden="true">↗</span></span>
+              </a>
+            </aside>
+          </div>
         </div>
 
       </section>

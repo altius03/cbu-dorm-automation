@@ -5,7 +5,6 @@ const requestForm = document.querySelector("#request-form");
 const loginButton = loginForm.querySelector('button[type="submit"]');
 const loginStatus = document.querySelector("#login-status");
 const status = document.querySelector("#status");
-const themeColor = document.querySelector('meta[name="theme-color"]');
 const calendarGrid = document.querySelector("#calendar-grid");
 const monthTitle = document.querySelector("#month-title");
 const prevMonthButton = document.querySelector("#prev-month");
@@ -137,10 +136,6 @@ function holidayFor(iso) {
 }
 
 function setConnected(connected) {
-  const pageColor = connected ? "#f3f5f8" : "#ffffff";
-  document.documentElement.style.backgroundColor = pageColor;
-  document.body.style.backgroundColor = pageColor;
-  themeColor.content = pageColor;
   loginSection.hidden = connected;
   appSection.hidden = !connected;
   if (!connected) {
