@@ -1,7 +1,7 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { decodeKey, seal, tokenHash, unseal } from "../service/crypto.mjs";
 import { HttpError } from "../service/errors.mjs";
-import { MAX_BATCH_DATES, parseIsoDate } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, parseIsoDate, validateResidencySchedule } from "../extension/core.mjs";
 
 export { HttpError as StoreError } from "../service/errors.mjs";
 const leaseMs = 360_000; // Must exceed the 300-second worker limit; an expired attempt is read-only reconciliation.
@@ -32,7 +32,11 @@ function datesForJob(dates) {
 function completeResult(result, cancelled = false) {
   const summary = Object.fromEntries([...terminalDate].map(status => [status, result.results.filter(row => row.status === status).length]));
   const outcome = cancelled ? "cancelled" : summary.unknown || summary.not_attempted ? "partial" : "batch";
-  return { ...result, summary, outcome, message: outcome === "cancelled" ? "남은 신청을 중단했습니다. 이미 접수된 날짜는 유지됩니다." : outcome === "partial" ? "확인이 필요한 결과가 있습니다. 학교 신청 내역을 확인해 주세요." : "모든 신청 결과를 확인했습니다." };
+  const message = outcome === "cancelled" ? "남은 신청을 중단했습니다. 이미 접수된 날짜는 유지됩니다."
+    : summary.unknown ? "확인이 필요한 결과가 있습니다. 학교 신청 내역을 확인해 주세요."
+      : summary.not_attempted ? "학교 신청내역에서 확인되지 않은 기간이 있습니다. 필요한 날짜만 다시 신청해 주세요."
+        : "모든 신청 결과를 확인했습니다.";
+  return { ...result, summary, outcome, message };
 }
 
 export class PostgresStore {
@@ -41,7 +45,7 @@ export class PostgresStore {
     this.sql = sql;
     this.key = Buffer.isBuffer(key) ? decodeKey(key.toString("base64")) : decodeKey(key);
     this.schema = schema;
-    this.t = Object.fromEntries(["key_guard", "profiles", "used_setup_tokens", "batch_jobs", "rate_limits", "busy_locks"].map(name => [name, `"${schema}"."${name}"`]));
+    this.t = Object.fromEntries(["key_guard", "profiles", "used_setup_tokens", "batch_jobs", "rate_limits", "busy_locks", "residency_schedules"].map(name => [name, `"${schema}"."${name}"`]));
   }
 
   hash(namespace, value) { return createHmac("sha256", this.key).update(namespace + "\0" + value).digest(); }
@@ -155,6 +159,47 @@ export class PostgresStore {
     if (!validId(profileId)) return [];
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new HttpError(400, "조회할 작업 개수가 올바르지 않습니다.");
     return (await this.q(`SELECT * FROM ${this.t.batch_jobs} WHERE profile_id = $1 ORDER BY updated_at DESC, created_at DESC LIMIT $2`, [profileId, limit])).map(jobView);
+  }
+  async schedules() {
+    return (await this.q(`SELECT * FROM ${this.t.residency_schedules} ORDER BY starts_on`)).map(row => validateResidencySchedule({
+      from: row.starts_on, through: row.through_on, term: row.term,
+      ends: { semester: row.semester_end, sixMonths: row.six_month_end, twelveMonths: row.twelve_month_end },
+      source: row.source, updatedAt: row.updated_at,
+    }));
+  }
+  async upsertSchedule(value) {
+    const schedule = validateResidencySchedule(value);
+    const [row] = await this.q(`INSERT INTO ${this.t.residency_schedules}
+      (term, starts_on, through_on, semester_end, six_month_end, twelve_month_end, source)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (term) DO UPDATE SET starts_on = EXCLUDED.starts_on, through_on = EXCLUDED.through_on,
+      semester_end = EXCLUDED.semester_end, six_month_end = EXCLUDED.six_month_end,
+      twelve_month_end = EXCLUDED.twelve_month_end, source = EXCLUDED.source, updated_at = clock_timestamp()
+      RETURNING *`, [schedule.term, schedule.from, schedule.through, schedule.ends.semester, schedule.ends.sixMonths, schedule.ends.twelveMonths, schedule.source]);
+    return validateResidencySchedule({
+      from: row.starts_on, through: row.through_on, term: row.term,
+      ends: { semester: row.semester_end, sixMonths: row.six_month_end, twelveMonths: row.twelve_month_end },
+      source: row.source, updatedAt: row.updated_at,
+    });
+  }
+  async reconcileJob(profileId, id, resolutions) {
+    if (!validId(profileId) || !validId(id)) return null;
+    if (!Array.isArray(resolutions) || resolutions.some(item => !Number.isInteger(item?.index) || !["saved", "overlap", "not_attempted"].includes(item.status))) {
+      throw new HttpError(400, "확인 결과 형식을 확인해 주세요.");
+    }
+    return this.transaction(async tx => {
+      const [row] = await this.q(`SELECT * FROM ${this.t.batch_jobs} WHERE profile_id = $1 AND id = $2 FOR UPDATE`, [profileId, id], tx);
+      if (!row) return null;
+      if (row.status === "running") throw new HttpError(409, "처리 중인 신청은 완료 후 다시 확인해 주세요.");
+      const result = row.result;
+      for (const { index, status } of resolutions) {
+        if (result.results[index]?.status === "unknown") result.results[index] = { ...result.results[index], status };
+      }
+      const [updated] = await this.q(`UPDATE ${this.t.batch_jobs} SET status = 'done', result = $3::jsonb,
+        attempt = NULL, claim_index = NULL, lease_until = NULL, updated_at = clock_timestamp()
+        WHERE profile_id = $1 AND id = $2 RETURNING *`, [profileId, id, completeResult(result, row.cancel_requested)], tx);
+      return jobView(updated);
+    });
   }
   async getJobById(id) {
     if (!validId(id)) return null;

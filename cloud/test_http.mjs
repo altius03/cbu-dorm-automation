@@ -35,7 +35,7 @@ let checkEntered;
 const publicOrigin = "https://overnight-cloud.example";
 const password = "fixture-only-cloud-password";
 
-for (const name of ["find", "claim", "reconnect", "setupUsed", "job", "jobs", "updateJob"]) {
+for (const name of ["find", "claim", "reconnect", "setupUsed", "job", "jobs", "updateJob", "schedules", "reconcileJob"]) {
   store[name] = async (...args) => {
     await turn();
     invoked.add(name);
@@ -271,6 +271,15 @@ try {
   assert.equal(starts.length, startsBeforeCollision);
   finish(collisionSingle.id);
 
+  const reconcileId = randomUUID();
+  const otherOwnerId = database.find(otherToken).id;
+  await store.createJob(reconcileId, otherOwnerId, [{ date: "20260921", end: "20260921" }]);
+  database.updateJob(reconcileId, "done", { results: [{ date: "20260921", end: "20260921", status: "unknown" }] });
+  const reconciled = await call("/api/batch/reconcile", { method: "POST", token: otherToken, body: { id: reconcileId } });
+  assert.equal(reconciled.status, 200);
+  assert.equal(reconciled.body.job.results[0].status, "saved");
+  assert.equal((await call("/api/batch/reconcile", { method: "POST", token, body: { id: reconcileId } })).status, 404);
+
   let releaseCheck;
   checkGate = new Promise(resolve => { releaseCheck = resolve; });
   const entered = new Promise(resolve => { checkEntered = resolve; });
@@ -322,7 +331,7 @@ try {
   assert.equal((await call("/api/session", { token: otherToken })).body.connected, false);
   assert.equal((await call("/api/account", { method: "DELETE", token: claimedToken })).status, 200);
   assert.equal((await call("/api/session", { token: claimedToken })).body.connected, false);
-  for (const method of ["find", "create", "claim", "reconnect", "job", "jobs", "createJob", "delete", "health", "withBusy", "consumeRate", "cancelJob", "claimDispatch", "releaseDispatch"]) {
+  for (const method of ["find", "create", "claim", "reconnect", "job", "jobs", "createJob", "delete", "health", "withBusy", "consumeRate", "cancelJob", "claimDispatch", "releaseDispatch", "schedules", "reconcileJob"]) {
     assert.ok(invoked.has(method), `deferred async method was not covered: ${method}`);
   }
   assert.doesNotMatch(JSON.stringify(logs), /fixture-only|cloudowner1|cloudother2|overnight_session/);

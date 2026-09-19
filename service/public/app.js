@@ -18,6 +18,8 @@ const selectionSummary = document.querySelector("#selection-summary");
 const submitButton = document.querySelector("#submit-selection");
 const cancelButton = document.querySelector("#cancel-job");
 const refreshButton = document.querySelector("#refresh-data");
+const reconcileButton = document.querySelector("#reconcile-job");
+const scheduleMeta = document.querySelector("#schedule-meta");
 const historyList = document.querySelector("#history-list");
 const historyEmpty = document.querySelector("#history-empty");
 const logoutButton = document.querySelector("#logout");
@@ -224,6 +226,9 @@ function updateControls() {
   }
   for (const control of loginForm.querySelectorAll("input, button")) control.disabled = actionBusy;
   refreshButton.disabled = actionBusy || checkingJob;
+  const canReconcile = state.activeJob?.status !== "running" && countStatuses(state.activeJob).unknown > 0;
+  reconcileButton.hidden = !canReconcile;
+  reconcileButton.disabled = !canReconcile || actionBusy || checkingJob || batchRunning || unresolvedJob;
   logoutButton.disabled = blocked;
   deleteButton.disabled = blocked;
   cancelButton.hidden = !batchRunning;
@@ -267,6 +272,10 @@ function configureSession(session) {
     const input = label.closest("label")?.querySelector("input");
     if (input) input.disabled = !horizon?.available;
   }
+  const schedule = state.horizons[0];
+  scheduleMeta.textContent = schedule
+    ? `${schedule.term} · ${String(schedule.updatedAt || "").slice(0, 10)} 갱신 · ${schedule.source}`
+    : "현재 적용할 수 있는 생활관 일정이 없습니다.";
   const checkedRange = document.querySelector('input[name="range"]:checked');
   if (checkedRange?.disabled) document.querySelector('input[name="range"]:not(:disabled)')?.click();
   updateSelection();
@@ -329,8 +338,7 @@ function showJob(job, remember = true) {
     : `${job.message || "처리가 끝났습니다."} · ${counts.saved}개 기간 완료, ${counts.exists + counts.overlap}개 제외${counts.unknown ? `, ${counts.unknown}개 확인 필요` : ""}`;
   show(message, jobRunning ? "" : needsCheck ? "error" : "success");
   renderHistory();
-  if (remember) updateControls();
-  else renderCalendar();
+  updateControls();
 }
 
 async function loadHistory() {
@@ -498,6 +506,20 @@ refreshButton.addEventListener("click", async () => {
     await Promise.all([loadHistory(), loadApplications()]);
     if (requestedJobId) await refreshJob(requestedJobId);
     else show("학교 신청내역과 최근 결과를 새로 불러왔습니다.", "success");
+  } catch (error) { show(error.message, "error"); }
+  finally { setBusy(false); }
+});
+
+reconcileButton.addEventListener("click", async () => {
+  const id = state.activeJob?.id;
+  if (!id || countStatuses(state.activeJob).unknown === 0) return;
+  setBusy(true);
+  show("학교 신청내역을 읽어 확인 필요 결과를 대조하고 있습니다…");
+  try {
+    const { job, applications } = await api("/api/batch/reconcile", { method: "POST", body: JSON.stringify({ id }) });
+    state.applications = applications || state.applications;
+    state.jobs = state.jobs.map(item => item.id === job.id ? job : item);
+    showJob(job);
   } catch (error) { show(error.message, "error"); }
   finally { setBusy(false); }
 });

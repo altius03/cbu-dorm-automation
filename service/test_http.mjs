@@ -20,6 +20,7 @@ const setupToken = "fixture-http-setup-token-".repeat(3);
 const logs = [];
 let clock = new Date();
 let loginCalls = 0;
+let applicationCalls = 0;
 let batchCalls = 0;
 let releaseBatch;
 let optionsForBatch;
@@ -40,7 +41,10 @@ const app = createApplication({
       await singleGate;
       return { status: "saved", message: "fixture-single-done" };
     },
-    applications: async () => [{ start: "2026-09-18", end: "2026-09-20", active: true }],
+    applications: async () => {
+      applicationCalls++;
+      return [{ start: "2026-09-18", end: "2026-09-20", active: true }];
+    },
     applyMany: async (periods, options) => {
       batchCalls++;
       optionsForBatch = options;
@@ -176,6 +180,17 @@ try {
   assert.equal((await call("/api/apply", { method: "POST", token: owner.token, body: singleBody })).body.job.status, "done");
   assert.equal(singleCalls, 1);
 
+  const reconcileId = randomUUID();
+  store.createJob(reconcileId, owner.id, [{ date: "20260918", end: "20260920" }]);
+  store.updateJob(reconcileId, "done", { results: [{ date: "20260918", end: "20260920", status: "unknown" }] });
+  const readsBeforeReconcile = applicationCalls;
+  const reconciled = await call("/api/batch/reconcile", { method: "POST", token: owner.token, body: { id: reconcileId } });
+  assert.equal(reconciled.status, 200);
+  assert.equal(reconciled.body.job.results[0].status, "saved");
+  assert.equal(applicationCalls, readsBeforeReconcile + 1);
+  assert.equal(singleCalls, 1, "reconciliation must not submit at school");
+  assert.equal((await call("/api/batch/reconcile", { method: "POST", token: other.token, body: { id: reconcileId } })).status, 404);
+
   // Multiple users behind one local tunnel must not consume each other's API quota.
   clock = new Date(clock.getTime() + 60_001);
   for (let index = 0; index < 120; index++) assert.equal((await call("/api/session", { token: owner.token })).status, 200);
@@ -200,17 +215,19 @@ try {
   assert.equal(store.database.prepare("SELECT COUNT(*) AS count FROM profiles").get().count, profileCount);
   assert.equal((await call("/api/session", { token: owner.token })).body.connected, false);
   const recoveredHistory = (await call("/api/batch/history", { token: renewedToken })).body.jobs;
-  assert.equal(recoveredHistory.length, 2);
+  assert.equal(recoveredHistory.length, 3);
   assert.ok(recoveredHistory.some(job => job.id === jobId));
   assert.ok(recoveredHistory.some(job => job.id === singleBody.id));
+  assert.ok(recoveredHistory.some(job => job.id === reconcileId));
   const logout = await call("/api/logout", { method: "POST", token: renewedToken, body: {} });
   assert.equal(logout.status, 200);
   assert.match(logout.headers["set-cookie"][0], /Max-Age=0/);
   assert.equal((await call("/api/session", { token: renewedToken })).body.connected, false);
   assert.equal(store.database.prepare("SELECT COUNT(*) AS count FROM profiles").get().count, profileCount);
-  assert.equal(store.jobs(owner.id).length, 2);
+  assert.equal(store.jobs(owner.id).length, 3);
   assert.equal((await call("/api/reconnect", { method: "POST", body: { studentId: "httpowner1", password: "fixture-password" } })).status, 201);
   assert.equal(logs.some(entry => /fixture-password|fixture-http-setup-token|overnight_session/.test(JSON.stringify(entry))), false);
+  assert.ok(logs.some(entry => entry.route === "/api/batch/reconcile" && Number.isInteger(entry.phases.schoolApplicationsMs)));
   console.log("real HTTP checks passed: socket responses, request guards, secure cookies, owned/cancelled jobs, durable single requests, replay protection, per-profile rate isolation, reconnect/logout preservation");
 } finally {
   releaseBatch();

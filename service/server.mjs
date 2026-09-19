@@ -4,12 +4,17 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { MAX_BATCH_DATES, buildBatchDates, groupBatchDates, localIsoDate, parseIsoDate, residencyHorizons, validatePeriod } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, buildBatchDates, findConflict, groupBatchDates, localIsoDate, parseIsoDate, residencyHorizons, validatePeriod } from "../extension/core.mjs";
 import { PortalError, TukoreaPortal } from "./portal.mjs";
 import { HttpError } from "./errors.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sessionCookieName = "overnight_session";
+const knownRoutes = new Set([
+  "/", "/app.js", "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect", "/api/claim",
+  "/api/logout", "/api/account", "/api/applications", "/api/check", "/api/apply", "/api/batch/job",
+  "/api/batch/history", "/api/batch/preview", "/api/batch/apply", "/api/batch/cancel", "/api/batch/reconcile",
+]);
 
 function sendJson(response, status, value) {
   const body = Buffer.from(JSON.stringify(value));
@@ -57,9 +62,9 @@ export function periodFrom(body, now = koreaNow()) {
   catch (error) { throw new HttpError(400, error.message); }
 }
 
-export function batchDatesFrom(body, now = koreaNow()) {
+export function batchDatesFrom(body, now = koreaNow(), schedules) {
   try {
-    const dates = buildBatchDates(body, localIsoDate(now)).filter(value => {
+    const dates = buildBatchDates(body, localIsoDate(now), schedules).filter(value => {
       try { validatePeriod(value, value, now); return true; }
       catch { return false; }
     });
@@ -88,6 +93,15 @@ export function createApplication({
   const rates = new Map();
   const requestProfiles = new WeakMap();
   let stopping = false;
+  const measure = async (phases, name, task) => {
+    const started = performance.now();
+    try { return await task(); }
+    finally { phases[name] = (phases[name] || 0) + Math.round(performance.now() - started); }
+  };
+  const currentHorizons = async (today, phases) => residencyHorizons(
+    today,
+    store.schedules ? await measure(phases, "scheduleMs", () => store.schedules()) : undefined,
+  );
   const cookie = (token, maxAge = 31_536_000) => [
     sessionCookieName + "=" + token, "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=" + maxAge, secureCookie ? "Secure" : "",
   ].filter(Boolean).join("; ");
@@ -188,7 +202,16 @@ export function createApplication({
     })) throw new HttpError(409, "다른 날짜로 사용된 신청 번호입니다. 신청 내용을 다시 확인해 주세요.");
   }
 
-  async function route(request, response) {
+  function reconciliationRows(applications) {
+    return applications.filter(item => item?.active).flatMap(item => {
+      const start = String(item.start || "").replaceAll("-", "");
+      const end = String(item.end || item.start || "").replaceAll("-", "");
+      return /^\d{8}$/.test(start) && /^\d{8}$/.test(end)
+        ? [{ outStayFrDt: start, outStayToDt: end, outStayStGbn: "1" }] : [];
+    });
+  }
+
+  async function route(request, response, phases) {
     const url = new URL(request.url, "http://localhost");
     const origin = guard(request);
     if (stopping && request.method !== "GET") throw new HttpError(503, "서버가 재시작 중입니다. 잠시 후 다시 시도해 주세요.");
@@ -199,16 +222,15 @@ export function createApplication({
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
-      if (store.health) await store.health();
-      else store.database.prepare("SELECT 1").get();
+      await measure(phases, "databaseMs", () => store.health ? store.health() : store.database.prepare("SELECT 1").get());
       return sendJson(response, 200, { ok: true });
     }
     await limit(request, ["/api/login", "/api/register", "/api/reconnect", "/api/claim"].includes(url.pathname));
     if (request.method === "GET" && url.pathname === "/api/session") {
-      const profile = await profileFrom(request);
+      const profile = await measure(phases, "databaseMs", () => profileFrom(request));
+      const today = localIsoDate(koreaNow(now()));
       return sendJson(response, 200, {
-        connected: Boolean(profile), today: localIsoDate(koreaNow(now())),
-        horizons: residencyHorizons(localIsoDate(koreaNow(now()))),
+        connected: Boolean(profile), today, horizons: await currentHorizons(today, phases),
         ...(profile ? { createdAt: profile.createdAt } : {}),
       });
     }
@@ -219,12 +241,32 @@ export function createApplication({
       return sendJson(response, 200, { job });
     }
     if (request.method === "GET" && url.pathname === "/api/batch/history") {
-      return sendJson(response, 200, { jobs: await store.jobs((await requireProfile(request)).id) });
+      const profile = await requireProfile(request);
+      return sendJson(response, 200, { jobs: await measure(phases, "databaseMs", () => store.jobs(profile.id)) });
     }
     if (request.method === "GET" && url.pathname === "/api/applications") {
       const profile = await requireProfile(request, true);
-      const applications = await withBusy(accountKey(profile), () => portalFactory(profile.credentials).applications());
+      const applications = await measure(phases, "schoolApplicationsMs", () => withBusy(accountKey(profile), () => portalFactory(profile.credentials).applications()));
       return sendJson(response, 200, { applications });
+    }
+    if (request.method === "POST" && url.pathname === "/api/batch/reconcile") {
+      const { id } = await readJson(request);
+      if (typeof id !== "string") throw new HttpError(400, "확인할 신청 결과를 선택해 주세요.");
+      const profile = await requireProfile(request, true);
+      const job = await measure(phases, "databaseMs", () => store.job(profile.id, id));
+      if (!job) throw new HttpError(404, "신청 작업을 찾을 수 없습니다.");
+      if (job.status === "running") throw new HttpError(409, "처리 중인 신청은 완료 후 다시 확인해 주세요.");
+      const unknown = (job.results || []).map((row, index) => ({ row, index })).filter(item => item.row.status === "unknown");
+      if (!unknown.length) return sendJson(response, 200, { job });
+      const applications = await measure(phases, "schoolApplicationsMs", () => withBusy(accountKey(profile), () => portalFactory(profile.credentials).applications()));
+      const rows = reconciliationRows(applications);
+      const resolutions = unknown.map(({ row, index }) => {
+        const conflict = findConflict(rows, row.date, row.end || row.date);
+        return { index, status: conflict?.type === "same" ? "saved" : conflict ? "overlap" : "not_attempted" };
+      });
+      const reconciled = await measure(phases, "databaseMs", () => store.reconcileJob(profile.id, id, resolutions));
+      if (!reconciled) throw new HttpError(404, "신청 작업을 찾을 수 없습니다.");
+      return sendJson(response, 200, { job: reconciled, applications });
     }
     if (request.method === "POST" && url.pathname === "/api/logout") {
       await readJson(request);
@@ -249,8 +291,8 @@ export function createApplication({
       const registrationKey = "registration:" + createHmac("sha256", store.key).update(credentials.studentId.toLowerCase()).digest("hex");
       const login = await withBusy(registrationKey, async () => {
         const portal = portalFactory(credentials);
-        await portal.login();
-        const existing = await store.reconnect(credentials, { now: now().getTime() });
+        await measure(phases, "schoolLoginMs", () => portal.login());
+        const existing = await measure(phases, "databaseMs", () => store.reconnect(credentials, { now: now().getTime() }));
         let profile = existing;
         if (!profile) {
           const supplied = Buffer.from(String(request.headers["x-setup-token"] || ""));
@@ -258,9 +300,9 @@ export function createApplication({
           const validSetup = setupToken && supplied.length === expected.length && timingSafeEqual(supplied, expected);
           if (!publicRegistration && !validSetup) throw new HttpError(403, "현재는 새 사용자 로그인을 받을 수 없습니다.");
           if (validSetup && await store.setupUsed(setupToken)) throw new HttpError(410, "이 로그인 링크는 이미 사용되었습니다.");
-          profile = await store.create(credentials, validSetup ? setupToken : "");
+          profile = await measure(phases, "databaseMs", () => store.create(credentials, validSetup ? setupToken : ""));
         }
-        try { return { profile, applications: await portal.applications() }; }
+        try { return { profile, applications: await measure(phases, "schoolApplicationsMs", () => portal.applications()) }; }
         catch (error) {
           return {
             profile, applications: [],
@@ -271,9 +313,9 @@ export function createApplication({
       response.setHeader("Set-Cookie", cookie(login.profile.token));
       const today = localIsoDate(koreaNow(now()));
       return sendJson(response, 201, {
-        connected: true, today, horizons: residencyHorizons(today), createdAt: login.profile.createdAt,
+        connected: true, today, horizons: await currentHorizons(today, phases), createdAt: login.profile.createdAt,
         applications: login.applications, applicationsError: login.applicationsError,
-        jobs: await store.jobs(login.profile.id),
+        jobs: await measure(phases, "databaseMs", () => store.jobs(login.profile.id)),
       });
     }
     if (request.method === "POST" && ["/api/register", "/api/reconnect"].includes(url.pathname)) {
@@ -291,7 +333,7 @@ export function createApplication({
       const registrationKey = publicRegistration ? "registration:" + createHmac("sha256", store.key).update(credentials.studentId.toLowerCase()).digest("hex") : "registration";
       const profile = await withBusy(registrationKey, async () => {
         if (registrationToken && await store.setupUsed(registrationToken)) throw new HttpError(410, "이 계정 연결 링크는 이미 사용되었습니다. 저장된 계정 다시 연결을 이용해 주세요.");
-        await portalFactory(credentials).login();
+        await measure(phases, "schoolLoginMs", () => portalFactory(credentials).login());
         if (!reconnect) return store.create(credentials, registrationToken);
         const existing = await store.reconnect(credentials, { now: now().getTime() });
         if (!existing) throw new HttpError(403, "다시 연결할 계정이 없습니다. 최초 계정 연결 링크를 이용해 주세요.");
@@ -302,7 +344,8 @@ export function createApplication({
     }
     if (request.method === "POST" && url.pathname === "/api/batch/preview") {
       const profile = await requireProfile(request);
-      const dates = batchDatesFrom(await readJson(request), koreaNow(now()));
+      const schedules = store.schedules ? await measure(phases, "scheduleMs", () => store.schedules()) : undefined;
+      const dates = batchDatesFrom(await readJson(request), koreaNow(now()), schedules);
       const periods = groupBatchDates(dates);
       const id = randomUUID();
       const payload = Buffer.from(JSON.stringify({ id, profileId: profile.id, dates, expires: now().getTime() + 600_000 })).toString("base64url");
@@ -325,7 +368,7 @@ export function createApplication({
       if (plan.expires <= now().getTime()) throw new HttpError(409, "미리보기가 만료되었습니다. 대상 날짜를 다시 확인해 주세요.");
       for (const date of plan.dates) periodFrom({ start: date }, koreaNow(now()));
       // HTTP 연결이 끊겨도 진행 결과는 DB에 남기며 재요청은 동일 작업을 반환한다.
-      const job = await startJob(profile, plan.id, periods, options => portalFactory(profile.credentials).applyMany(periods, options));
+      const job = await measure(phases, "dispatchMs", () => startJob(profile, plan.id, periods, options => portalFactory(profile.credentials).applyMany(periods, options)));
       return sendJson(response, 202, { job });
     }
     if (request.method === "POST" && url.pathname === "/api/batch/cancel") {
@@ -355,16 +398,16 @@ export function createApplication({
           return sendJson(response, 200, { job: existing });
         }
         const { start, end } = periodFrom(body, koreaNow(now()));
-        const job = await startJob(profile, body.id, [start.compact], async ({ onProgress, shouldStop }) => {
+        const job = await measure(phases, "dispatchMs", () => startJob(profile, body.id, [start.compact], async ({ onProgress, shouldStop }) => {
           if (shouldStop()) return { status: "cancelled", results: [{ date: start.compact, end: end.compact, status: "not_attempted" }], message: "신청을 중단했습니다." };
           await onProgress({ results: [{ date: start.compact, end: end.compact, status: "unknown" }], message: "신청 결과를 확인하고 있습니다." });
           const result = await portalFactory(profile.credentials).apply(start.compact, end.compact, { shouldStop });
           return { ...result, results: [{ date: start.compact, end: end.compact, status: result.status === "cancelled" ? "not_attempted" : result.status }] };
-        }, end.compact);
+        }, end.compact));
         return sendJson(response, 202, { job });
       }
       const period = periodFrom(body, koreaNow(now()));
-      const result = await withBusy(accountKey(profile), () => portalFactory(profile.credentials).apply(period.start.compact, period.end.compact, { dryRun: true }));
+      const result = await measure(phases, "schoolCheckMs", () => withBusy(accountKey(profile), () => portalFactory(profile.credentials).apply(period.start.compact, period.end.compact, { dryRun: true })));
       return sendJson(response, 200, result);
     }
     if (request.method === "DELETE" && url.pathname === "/api/account") {
@@ -379,6 +422,10 @@ export function createApplication({
   async function handler(request, response) {
     const started = Date.now();
     const requestId = randomUUID();
+    const phases = {};
+    let pathname = "";
+    try { pathname = new URL(request.url, "http://localhost").pathname; } catch {}
+    const routeName = knownRoutes.has(pathname) ? pathname : "other";
     response.setHeader("X-Request-Id", requestId);
     response.setHeader("Cache-Control", "no-store");
     response.setHeader("Content-Security-Policy", "default-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; style-src 'self' 'unsafe-inline'");
@@ -386,7 +433,7 @@ export function createApplication({
     response.setHeader("Referrer-Policy", "no-referrer");
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader("X-Frame-Options", "DENY");
-    try { await route(request, response); }
+    try { await route(request, response, phases); }
     catch (error) {
       if (response.headersSent) response.destroy();
       else {
@@ -396,7 +443,7 @@ export function createApplication({
       }
     } finally {
       // URL, 본문, 쿠키, 학교 응답 및 예외 원문은 비밀값을 포함할 수 있어 기록하지 않는다.
-      logger({ requestId, method: request.method, status: response.statusCode, durationMs: Date.now() - started });
+      logger({ requestId, route: routeName, method: request.method, status: response.statusCode, durationMs: Date.now() - started, phases });
     }
   }
   return { handler, drain: () => Promise.allSettled([...busy.values()]), stop: () => { stopping = true; } };

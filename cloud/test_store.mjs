@@ -4,6 +4,11 @@ import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { PostgresStore, internals } from "./store.mjs";
 
+const migrationSource = () => [
+  "./supabase/migrations/20260919095949_init_cloud_schema.sql",
+  "./supabase/migrations/20260919135500_residency_schedules.sql",
+].map(path => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n").replace(/^(?:BEGIN|COMMIT);$/gm, "");
+
 const longBatch = Array.from({ length: 96 }, (_, index) => {
   const date = new Date(Date.UTC(2099, 0, index + 1)).toISOString().slice(0, 10).replaceAll("-", "");
   return date;
@@ -34,7 +39,7 @@ async function restrictedMigration(root, connectionUrl) {
     client = postgres(target.toString(), { max: 1, prepare: false, onnotice: () => {} });
     const [permissions] = await client`SELECT rolsuper, rolcreaterole, rolcreatedb FROM pg_roles WHERE rolname = current_user`;
     assert.deepEqual(permissions, { rolsuper: false, rolcreaterole: true, rolcreatedb: false });
-    const migration = readFileSync(new URL("./schema.sql", import.meta.url), "utf8").replaceAll("overnight_app", appRole);
+    const migration = migrationSource().replaceAll("overnight_app", appRole);
     await client.unsafe(migration);
     await client.unsafe(migration);
     const [backend] = await client`SELECT rolsuper, rolreplication, rolbypassrls, rolcreatedb, rolcreaterole FROM pg_roles WHERE rolname = ${appRole}`;
@@ -68,7 +73,7 @@ if (!url) {
   let madeAppRole = false;
   let madeDeniedRole = false;
   try {
-    const migration = readFileSync(new URL("./supabase/migrations/20260919095949_init_cloud_schema.sql", import.meta.url), "utf8").replaceAll("overnight_private", schema).replaceAll("overnight_app", appRole).replace(/^BEGIN;$/m, "").replace(/^COMMIT;$/m, "");
+    const migration = migrationSource().replaceAll("overnight_private", schema).replaceAll("overnight_app", appRole);
     await sql.begin(tx => tx.unsafe(migration));
     madeAppRole = true;
     await sql.unsafe(`CREATE ROLE "${deniedRole}" NOLOGIN`);
@@ -98,7 +103,7 @@ if (!url) {
 
     // Privileges and RLS: backend role can access this schema; an ungranted role cannot.
     const policies = await sql.unsafe(`SELECT c.relrowsecurity, c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${schema}' AND c.relkind = 'r'`);
-    assert.equal(policies.length, 6);
+    assert.equal(policies.length, 7);
     assert.ok(policies.every(row => row.relrowsecurity && row.relforcerowsecurity));
     await sql.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE "${appRole}"`);
@@ -116,6 +121,11 @@ if (!url) {
     const raw = (await sql.unsafe(`SELECT * FROM "${schema}".profiles WHERE id = $1`, [owner.id]))[0];
     assert.equal(raw.credential_ciphertext.includes(credentials.password), false);
     assert.equal(raw.account_key.length, 32);
+    assert.equal((await store.schedules()).find(item => item.term === "2026-2").ends.semester, "2026-12-23");
+    assert.equal((await store.upsertSchedule({
+      term: "2027-1", from: "2027-02-14", through: "2027-08-28", source: "fixture notice",
+      ends: { semester: "2027-06-23", sixMonths: "2027-08-15", twelveMonths: "2028-02-13" },
+    })).source, "fixture notice");
 
     const firstId = randomUUID();
     await store.createJob(firstId, owner.id, [{ date: "20990101", end: "20990102" }, "20990103"]);
@@ -165,6 +175,8 @@ if (!url) {
     const partial = await store.finishDate(crashId, { ...next, status: "unknown" });
     assert.equal(partial.outcome, "partial");
     assert.equal((await store.claimNext(crashId)).kind, "done");
+    assert.equal((await store.reconcileJob(owner.id, crashId, [{ index: 1, status: "not_attempted" }])).results[1].status, "not_attempted");
+    assert.equal(await store.reconcileJob(other.id, crashId, []), null);
 
     const cancelledUnknownId = randomUUID();
     await store.createJob(cancelledUnknownId, owner.id, ["20990106", "20990107"]);

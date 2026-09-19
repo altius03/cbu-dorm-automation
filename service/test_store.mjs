@@ -43,6 +43,11 @@ try {
   afterFailure.close();
   delete process.env.OVERNIGHT_MASTER_KEY;
   let store = open(directory);
+  assert.equal(store.schedules().find(item => item.term === "2026-2").ends.semester, "2026-12-23");
+  assert.equal(store.upsertSchedule({
+    term: "2027-1", from: "2027-02-14", through: "2027-08-28", source: "fixture notice",
+    ends: { semester: "2027-06-23", sixMonths: "2027-08-15", twelveMonths: "2028-02-13" },
+  }).source, "fixture notice");
   assert.deepEqual(store.find(token).credentials, credentials);
   assert.deepEqual(store.database.prepare("SELECT * FROM profiles").get(), original);
   assert.equal(store.find(token, { now: NaN }), null);
@@ -79,6 +84,8 @@ try {
   assert.equal(store.jobs(claimed.id, 1)[0].id, "recover");
   assert.equal(store.jobs("unrelated-profile").length, 0);
   assert.throws(() => store.jobs(claimed.id, 51), /개수/);
+  assert.equal(store.reconcileJob(claimed.id, "uncertain", [{ index: 0, status: "not_attempted" }]).results[0].status, "not_attempted");
+  assert.equal(store.reconcileJob("unrelated-profile", "uncertain", []), null);
 
   // 학교에서 새 비밀번호 검증을 마친 복구 요청은 같은 프로필과 신청 기록을 유지한다.
   const recoveryClock = expiry + 1000;

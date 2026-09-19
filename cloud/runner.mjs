@@ -8,13 +8,20 @@ export async function runChunk(jobId, {
   portalFactory = credentials => new TukoreaPortal(credentials.studentId, credentials.password),
   maxItems = 16,
   timeBudgetMs = 180_000,
+  logger = entry => console.log(JSON.stringify(entry)),
 } = {}) {
   const started = Date.now();
   let school;
+  let handled = 0;
+  let schoolSetupMs = 0;
+  const finish = result => {
+    try { logger({ event: "application_chunk", result, handled, schoolSetupMs, durationMs: Date.now() - started }); } catch {}
+    return result;
+  };
   try {
-    for (let handled = 0; handled < maxItems; handled++) {
+    for (; handled < maxItems;) {
       const claim = await store.claimNext(jobId);
-      if (claim.kind === "done" || claim.kind === "busy") return claim.kind;
+      if (claim.kind === "done" || claim.kind === "busy") return finish(claim.kind);
       if (!["work", "reconcile"].includes(claim.kind)) throw new Error();
       const { attempt, index, date } = claim;
       const end = claim.end ?? date;
@@ -32,9 +39,11 @@ export async function runChunk(jobId, {
           status = claim.kind === "work" ? "not_attempted" : "unknown";
         } else {
           if (!school) {
+            const setupStarted = Date.now();
             const portal = await portalFactory(credentials);
             const context = await portal.applicationContext();
             school = { portal, context, rows: await context.list() };
+            schoolSetupMs += Date.now() - setupStarted;
           }
           try {
             const conflict = findConflict(school.rows, date, end);
@@ -61,15 +70,17 @@ export async function runChunk(jobId, {
       try { job = await store.finishDate(jobId, { attempt, index, status }); }
       catch (error) {
         // Another worker owns the new lease. The next step may only claim/reconcile its current state.
-        if (error?.status === 409) return "busy";
+        if (error?.status === 409) return finish("busy");
         throw error;
       }
-      if (job?.status !== "running") return "done";
+      handled++;
+      if (job?.status !== "running") return finish("done");
       // ponytail: stop before the 300-second function ceiling; the next workflow step resumes the next period.
-      if (Date.now() - started >= timeBudgetMs) return "continue";
+      if (Date.now() - started >= timeBudgetMs) return finish("continue");
     }
-    return "continue";
+    return finish("continue");
   } catch {
+    finish("failed");
     // Workflow engines persist thrown errors, including causes; do not forward database or school errors.
     throw new Error("외박신청 처리 상태를 확인할 수 없습니다. 잠시 후 작업 상태를 확인해 주세요.");
   }

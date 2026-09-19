@@ -15,9 +15,10 @@ assert.match(html, /학기 퇴관까지[\s\S]*6개월 퇴관까지[\s\S]*12개�
 assert.match(html, /매일[\s\S]*평일 전체[\s\S]*주말 전체[\s\S]*지정 요일/);
 assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: fixed/);
 assert.match(html, /학교 신청내역[\s\S]*확인 필요[\s\S]*제외·미처리/);
+assert.match(html, /id="schedule-meta"[\s\S]*id="reconcile-job"/);
 assert.doesNotMatch(html, /저장된 계정 다시 연결|계정 연결|퇴관일.*(?:input|저장)/);
 
-for (const endpoint of ["/api/login", "/api/applications", "/api/batch/history", "/api/batch/preview", "/api/batch/apply"]) {
+for (const endpoint of ["/api/login", "/api/applications", "/api/batch/history", "/api/batch/preview", "/api/batch/apply", "/api/batch/reconcile"]) {
   assert.ok(script.includes(endpoint), `${endpoint} UI flow missing`);
 }
 assert.match(script, /state\.activeJob = job;[\s\S]*renderCalendar/);

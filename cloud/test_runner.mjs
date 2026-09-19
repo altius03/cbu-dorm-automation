@@ -196,10 +196,13 @@ for (const [failure, expected] of [
     { date: "20990109", end: "20990116" },
   ]);
   const school = fakeSchool(store);
-  assert.equal(await runChunk(store.job.id, { store, ...school }), "done");
+  const logs = [];
+  assert.equal(await runChunk(store.job.id, { store, ...school, logger: entry => logs.push(entry) }), "done");
   assert.equal(school.stats.credentials, 1, "one workflow chunk must reuse one school login");
   assert.equal(school.stats.reads, 1, "one workflow chunk must reuse one application context");
   assert.equal(school.stats.writes, 2);
+  assert.deepEqual(logs.map(entry => [entry.event, entry.result, entry.handled]), [["application_chunk", "done", 2]]);
+  assert.equal(JSON.stringify(logs).includes(PRIVATE), false);
 }
 {
   const store = fakeStore();

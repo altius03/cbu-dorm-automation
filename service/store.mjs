@@ -3,7 +3,9 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "n
 import { join } from "node:path";
 
 import { DatabaseSync } from "node:sqlite";
+import { DEFAULT_RESIDENCY_SCHEDULES, validateResidencySchedule } from "../extension/core.mjs";
 import { decodeKey, seal, tokenHash, unseal } from "./crypto.mjs";
+import { HttpError } from "./errors.mjs";
 
 function loadMasterKey(dataDirectory) {
   if (process.env.OVERNIGHT_MASTER_KEY) return decodeKey(process.env.OVERNIGHT_MASTER_KEY);
@@ -32,6 +34,18 @@ function jobResult(value) {
 
 function storedJob(row) {
   return row ? { ...jobResult(row.result), id: row.id, status: row.status, updatedAt: row.updated_at } : null;
+}
+
+function completed(result) {
+  const statuses = ["saved", "exists", "overlap", "unknown", "not_attempted"];
+  const summary = Object.fromEntries(statuses.map(status => [status, result.results.filter(row => row.status === status).length]));
+  const outcome = result.cancelRequested ? "cancelled" : summary.unknown || summary.not_attempted ? "partial" : "batch";
+  const message = outcome === "cancelled"
+    ? "남은 신청을 중단했습니다. 이미 접수된 날짜는 유지됩니다."
+    : summary.unknown ? "확인이 필요한 결과가 있습니다. 학교 신청 내역을 확인해 주세요."
+      : summary.not_attempted ? "학교 신청내역에서 확인되지 않은 기간이 있습니다. 필요한 날짜만 다시 신청해 주세요."
+        : "모든 신청 결과를 확인했습니다.";
+  return { ...result, summary, outcome, message };
 }
 
 export class CredentialStore {
@@ -76,7 +90,22 @@ export class CredentialStore {
         pid INTEGER NOT NULL,
         token TEXT NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS residency_schedules (
+        term TEXT PRIMARY KEY,
+        starts_on TEXT NOT NULL,
+        through_on TEXT NOT NULL,
+        semester_end TEXT NOT NULL,
+        six_month_end TEXT NOT NULL,
+        twelve_month_end TEXT NOT NULL,
+        source TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      ) STRICT;
         `);
+        const seedSchedule = this.database.prepare("INSERT OR IGNORE INTO residency_schedules VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        for (const schedule of DEFAULT_RESIDENCY_SCHEDULES) seedSchedule.run(
+          schedule.term, schedule.from, schedule.through, schedule.ends.semester, schedule.ends.sixMonths,
+          schedule.ends.twelveMonths, schedule.source, schedule.updatedAt,
+        );
         // 잘못 교체한 키로 새 계정을 저장하기 전에 기존 암호문의 인증을 확인한다.
         for (const row of this.database.prepare("SELECT id, credential_ciphertext FROM profiles").iterate()) {
           try { unseal(row.credential_ciphertext, row.id, this.key); }
@@ -201,6 +230,51 @@ export class CredentialStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("조회할 작업 개수가 올바르지 않습니다.");
     return this.database.prepare("SELECT * FROM batch_jobs WHERE profile_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?")
       .all(profileId, limit).map(storedJob);
+  }
+
+  schedules() {
+    return this.database.prepare("SELECT * FROM residency_schedules ORDER BY starts_on").all().map(row => validateResidencySchedule({
+      from: row.starts_on, through: row.through_on, term: row.term,
+      ends: { semester: row.semester_end, sixMonths: row.six_month_end, twelveMonths: row.twelve_month_end },
+      source: row.source, updatedAt: row.updated_at,
+    }));
+  }
+
+  upsertSchedule(value) {
+    const schedule = validateResidencySchedule(value);
+    const updatedAt = new Date().toISOString();
+    this.database.prepare(`INSERT INTO residency_schedules VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(term) DO UPDATE SET starts_on = excluded.starts_on, through_on = excluded.through_on,
+      semester_end = excluded.semester_end, six_month_end = excluded.six_month_end,
+      twelve_month_end = excluded.twelve_month_end, source = excluded.source, updated_at = excluded.updated_at`).run(
+      schedule.term, schedule.from, schedule.through, schedule.ends.semester, schedule.ends.sixMonths,
+      schedule.ends.twelveMonths, schedule.source, updatedAt,
+    );
+    return this.schedules().find(item => item.term === schedule.term);
+  }
+
+  reconcileJob(profileId, id, resolutions) {
+    if (!Array.isArray(resolutions) || resolutions.some(item => !Number.isInteger(item?.index) || !["saved", "overlap", "not_attempted"].includes(item.status))) {
+      throw new HttpError(400, "확인 결과 형식을 확인해 주세요.");
+    }
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.database.prepare("SELECT * FROM batch_jobs WHERE profile_id = ? AND id = ?").get(profileId, id);
+      if (!row) { this.database.exec("COMMIT"); return null; }
+      if (row.status === "running") throw new HttpError(409, "처리 중인 신청은 완료 후 다시 확인해 주세요.");
+      const result = jobResult(row.result);
+      for (const { index, status } of resolutions) {
+        if (result.results[index]?.status === "unknown") result.results[index] = { ...result.results[index], status };
+      }
+      const final = completed(result);
+      this.database.prepare("UPDATE batch_jobs SET status = 'done', result = ?, updated_at = ? WHERE id = ?")
+        .run(JSON.stringify(final), new Date().toISOString(), id);
+      this.database.exec("COMMIT");
+      return this.job(profileId, id);
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   recoverJobs() {

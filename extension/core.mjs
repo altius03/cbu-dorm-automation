@@ -1,15 +1,17 @@
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const MAX_BATCH_DATES = 370;
 
-// 학교 모집 공지의 지정 입주기간. 다음 학기 공지가 나오면 이 표만 갱신한다.
-const RESIDENCY_SCHEDULES = [
+// DB가 아직 준비되지 않은 로컬 실행과 장애 시 사용하는 마지막 확인 일정이다.
+export const DEFAULT_RESIDENCY_SCHEDULES = [
   {
     from: "2026-02-27", through: "2026-08-28", term: "2026-1",
     ends: { semester: "2026-06-23", sixMonths: "2026-08-15", twelveMonths: "2027-02-13" },
+    source: "2026학년도 생활관 모집 공지", updatedAt: "2026-09-19T00:00:00.000Z",
   },
   {
     from: "2026-08-29", through: "2027-02-13", term: "2026-2",
     ends: { semester: "2026-12-23", sixMonths: "2027-02-13", twelveMonths: "2027-02-13" },
+    source: "2026학년도 생활관 모집 공지", updatedAt: "2026-09-19T00:00:00.000Z",
   },
 ];
 
@@ -114,18 +116,37 @@ export function groupBatchDates(dates) {
   return periods;
 }
 
-export function residencyHorizons(todayValue = localIsoDate()) {
+export function validateResidencySchedule(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !/^\d{4}-[12]$/.test(value.term || "")) {
+    throw new Error("생활관 일정 형식을 확인해 주세요.");
+  }
+  const source = typeof value.source === "string" ? value.source.trim() : "";
+  if (!source || source.length > 200) throw new Error("생활관 일정 출처를 확인해 주세요.");
+  const from = parseIsoDate(value.from).iso;
+  const through = parseIsoDate(value.through).iso;
+  const semester = parseIsoDate(value.ends?.semester).iso;
+  const sixMonths = parseIsoDate(value.ends?.sixMonths).iso;
+  const twelveMonths = parseIsoDate(value.ends?.twelveMonths).iso;
+  if (from > through || semester < from || sixMonths < semester || twelveMonths < sixMonths) {
+    throw new Error("생활관 일정 날짜 순서를 확인해 주세요.");
+  }
+  const updatedAt = value.updatedAt === undefined ? undefined : new Date(value.updatedAt).toISOString();
+  return { from, through, term: value.term, ends: { semester, sixMonths, twelveMonths }, source, ...(updatedAt ? { updatedAt } : {}) };
+}
+
+export function residencyHorizons(todayValue = localIsoDate(), schedules = DEFAULT_RESIDENCY_SCHEDULES) {
   parseIsoDate(todayValue);
-  const schedule = RESIDENCY_SCHEDULES.find(item => item.from <= todayValue && todayValue <= item.through);
+  if (!Array.isArray(schedules)) throw new Error("생활관 일정 형식을 확인해 주세요.");
+  const schedule = schedules.map(validateResidencySchedule).find(item => item.from <= todayValue && todayValue <= item.through);
   if (!schedule) return [];
   return [
     { id: "semester", label: "학기 퇴관", end: schedule.ends.semester },
     { id: "sixMonths", label: "6개월 퇴관", end: schedule.ends.sixMonths },
     { id: "twelveMonths", label: "12개월 퇴관", end: schedule.ends.twelveMonths },
-  ].map(item => ({ ...item, term: schedule.term, available: item.end >= todayValue }));
+  ].map(item => ({ ...item, term: schedule.term, source: schedule.source, updatedAt: schedule.updatedAt, available: item.end >= todayValue }));
 }
 
-export function buildBatchDates(body, todayValue = localIsoDate()) {
+export function buildBatchDates(body, todayValue = localIsoDate(), schedules = DEFAULT_RESIDENCY_SCHEDULES) {
   const today = parseIsoDate(todayValue);
   if (!body || typeof body !== "object" || Array.isArray(body)) throw new Error("신청 방식을 선택하세요.");
 
@@ -156,7 +177,7 @@ export function buildBatchDates(body, todayValue = localIsoDate()) {
     return kind === "daily-month" ? dates : weekends(dates);
   }
 
-  const horizon = residencyHorizons(todayValue).find(item => item.id === body.range && item.available);
+  const horizon = residencyHorizons(todayValue, schedules).find(item => item.id === body.range && item.available);
   if (!horizon) throw new Error("선택한 입주기간의 퇴관일이 아직 공지되지 않았습니다.");
   const end = parseIsoDate(horizon.end);
   const dates = datesFrom(today.epochDay, end.epochDay - today.epochDay + 1);

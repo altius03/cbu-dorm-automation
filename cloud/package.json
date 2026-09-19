@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "nitro dev --port 8789",
     "build": "nitro build --preset vercel && node finalize-build.mjs",
+    "schedule:set": "node set-schedule.mjs",
     "test": "node test_runner.mjs && node test_http.mjs && node test_store.mjs",
     "test:workflow": "node test_workflow.mjs"
   },

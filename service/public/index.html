@@ -105,6 +105,7 @@
       .choice input { margin-top: 2px; accent-color: var(--blue); }
       .choice strong, .choice small { display: block; }
       .choice small { margin-top: 3px; color: var(--muted); }
+      #schedule-meta { margin: 9px 2px 0; color: var(--muted); font-size: 12px; }
       .options-section + .options-section { margin-top: 20px; }
       #custom-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
       #custom-weekdays label { position: relative; }
@@ -121,6 +122,7 @@
       .history-item small { color: var(--muted); }
       #history-empty { margin: 0; font-size: 14px; }
       #refresh-data { white-space: nowrap; }
+      .panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
       @media (max-width: 760px) {
         .app-shell { width: 100%; padding: 18px 14px 110px; }
         .workspace { grid-template-columns: 1fr; }
@@ -225,6 +227,7 @@
                     <label class="choice"><input type="radio" name="range" value="sixMonths" /><span><strong>6개월 퇴관까지</strong><small data-horizon="sixMonths">일정 확인 중</small></span></label>
                     <label class="choice"><input type="radio" name="range" value="twelveMonths" /><span><strong>12개월 퇴관까지</strong><small data-horizon="twelveMonths">일정 확인 중</small></span></label>
                   </div>
+                  <p id="schedule-meta"></p>
                 </fieldset>
 
                 <fieldset class="options-section">
@@ -262,7 +265,10 @@
               <h2 id="history-heading">최근 신청 결과</h2>
               <p>결과를 누르면 달력에서 날짜별 상태를 확인할 수 있습니다.</p>
             </div>
-            <button id="refresh-data" class="secondary" type="button">새로고침</button>
+            <div class="panel-actions">
+              <button id="reconcile-job" class="secondary" type="button" hidden>학교 내역으로 결과 다시 확인</button>
+              <button id="refresh-data" class="secondary" type="button">새로고침</button>
+            </div>
           </div>
           <div id="history-list"></div>
           <p id="history-empty">아직 신청 기록이 없습니다.</p>

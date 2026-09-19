@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MAX_BATCH_DATES, buildBatchDates, findConflict, groupBatchDates, parseIsoDate, residencyHorizons, validatePeriod } from "./core.mjs";
+import { MAX_BATCH_DATES, buildBatchDates, findConflict, groupBatchDates, parseIsoDate, residencyHorizons, validatePeriod, validateResidencySchedule } from "./core.mjs";
 
 const now = new Date(2026, 8, 19, 12, 0);
 assert.equal(parseIsoDate("2026-09-20").compact, "20260920");
@@ -71,5 +71,13 @@ assert.deepEqual(
 assert.throws(() => buildBatchDates({ dates: Array(MAX_BATCH_DATES + 1).fill("2026-09-20") }, "2026-09-19"), /날짜/);
 assert.throws(() => buildBatchDates({ range: "semester", pattern: "custom", weekdays: [] }, "2026-09-19"), /요일/);
 assert.deepEqual(residencyHorizons("2027-02-14"), []);
+const configured = [{
+  from: "2027-02-14", through: "2027-08-28", term: "2027-1",
+  ends: { semester: "2027-06-23", sixMonths: "2027-08-15", twelveMonths: "2028-02-13" },
+  source: "fixture official notice", updatedAt: "2027-01-01T00:00:00Z",
+}];
+assert.equal(buildBatchDates({ range: "semester", pattern: "daily" }, "2027-02-14", configured).at(-1), "2027-06-23");
+assert.equal(residencyHorizons("2027-02-14", configured)[0].source, "fixture official notice");
+assert.throws(() => validateResidencySchedule({ ...configured[0], ends: { ...configured[0].ends, semester: "2026-01-01" } }), /날짜 순서/);
 
 console.log("extension core checks passed");
