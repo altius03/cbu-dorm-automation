@@ -9,6 +9,8 @@ const longBatch = Array.from({ length: 96 }, (_, index) => {
   return date;
 });
 assert.equal(internals.datesForJob(longBatch).length, 96);
+assert.deepEqual(internals.datesForJob([{ date: "20990101", end: "20990108" }])[0], { date: "20990101", end: "20990108", status: "not_attempted" });
+assert.throws(() => internals.datesForJob([{ date: "20990101", end: "20990109" }]), /기간/);
 assert.throws(() => internals.datesForJob(Array.from({ length: 371 }, (_, index) => ({ date: longBatch[index % longBatch.length], end: longBatch[index % longBatch.length] }))), /날짜/);
 
 async function restrictedMigration(root, connectionUrl) {

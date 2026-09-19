@@ -41,12 +41,12 @@ const app = createApplication({
       return { status: "saved", message: "fixture-single-done" };
     },
     applications: async () => [{ start: "2026-09-18", end: "2026-09-20", active: true }],
-    applyMany: async (dates, options) => {
+    applyMany: async (periods, options) => {
       batchCalls++;
       optionsForBatch = options;
-      await options.onProgress({ message: "fixture-processing", results: dates.map(date => ({ date, status: "not_attempted" })) });
+      await options.onProgress({ message: "fixture-processing", results: periods.map(period => ({ ...period, status: "not_attempted" })) });
       await batchGate;
-      return { status: options.shouldStop?.() ? "cancelled" : "batch", message: "fixture-done", results: dates.map(date => ({ date, status: "not_attempted" })) };
+      return { status: options.shouldStop?.() ? "cancelled" : "batch", message: "fixture-done", results: periods.map(period => ({ ...period, status: "not_attempted" })) };
     },
   }),
 });
@@ -114,6 +114,9 @@ try {
     headers: { Host: "overnight.example", Origin: publicOrigin, "X-Setup-Token": setupToken },
   });
   assert.equal(connected.status, 201);
+  assert.deepEqual(connected.body.applications, [{ start: "2026-09-18", end: "2026-09-20", active: true }]);
+  assert.deepEqual(connected.body.jobs, []);
+  assert.equal(connected.body.horizons.find(item => item.id === "semester").end, "2026-12-23");
   const cookie = connected.headers["set-cookie"]?.[0];
   assert.match(cookie, /; HttpOnly/);
   assert.match(cookie, /; SameSite=Strict/);
@@ -131,6 +134,7 @@ try {
   const preview = await call("/api/batch/preview", previewRequest);
   assert.equal(preview.status, 200);
   assert.ok(preview.body.dates.length >= 29);
+  assert.ok(preview.body.periods.length < preview.body.dates.length);
   assert.equal(batchCalls, 0);
   assert.equal((await call("/api/batch/apply", { method: "POST", token: other.token, body: { plan: preview.body.plan } })).status, 403);
   const accepted = await call("/api/batch/apply", { method: "POST", token: owner.token, body: { plan: preview.body.plan } });

@@ -99,6 +99,10 @@ function rememberJob(id) {
   try { if (id) sessionStorage.setItem(pendingKey, id); else sessionStorage.removeItem(pendingKey); } catch {}
 }
 
+function hasApplication(iso) {
+  return state.applications.some(item => item.active && item.start <= iso && iso <= item.end);
+}
+
 function setConnected(connected) {
   loginSection.hidden = connected;
   appSection.hidden = !connected;
@@ -118,7 +122,7 @@ function setBusy(busy) {
 }
 
 function activeDates() {
-  if (manualMode.checked) return [...state.manualDates].sort();
+  if (manualMode.checked) return [...state.manualDates].filter(date => !hasApplication(date)).sort();
   const horizon = state.horizons.find(item => item.id === checkedValue("range") && item.available);
   if (!horizon || !state.today || horizon.end < state.today) return [];
   const pattern = checkedValue("pattern");
@@ -127,9 +131,9 @@ function activeDates() {
     const day = dateAt(value).getUTCDay();
     if (pattern === "daily") return true;
     if (pattern === "weekdays") return day >= 1 && day <= 5;
-    if (pattern === "weekends") return day === 0 || day === 6;
+    if (pattern === "weekends") return day === 0 || day === 5 || day === 6;
     return pattern === "custom" && weekdays.has(day);
-  });
+  }).filter(date => !hasApplication(date));
 }
 
 function maxSelectableDate() {
@@ -171,7 +175,7 @@ function renderCalendar() {
     }
     const iso = `${state.viewYear}-${String(state.viewMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
     const button = document.createElement("button");
-    const application = state.applications.some(item => item.active && item.start <= iso && iso <= item.end);
+    const application = hasApplication(iso);
     const mark = marks.get(iso);
     button.type = "button";
     button.className = "day";
@@ -189,7 +193,7 @@ function renderCalendar() {
     if (mark) labels.push(statusNames[mark] || "결과 확인 필요");
     button.setAttribute("aria-label", labels.join(", "));
     button.setAttribute("aria-pressed", String(selected.has(iso)));
-    button.disabled = iso < state.today || iso > maxSelectableDate() || autoMode.checked || actionBusy || batchRunning || unresolvedJob;
+    button.disabled = iso < state.today || iso > maxSelectableDate() || application || autoMode.checked || actionBusy || batchRunning || unresolvedJob;
     button.addEventListener("click", () => {
       if (state.manualDates.has(iso)) state.manualDates.delete(iso);
       else state.manualDates.add(iso);
@@ -287,7 +291,7 @@ function renderHistory() {
     button.className = "history-item";
     button.dataset.id = job.id;
     button.setAttribute("aria-pressed", String(state.activeJob?.id === job.id));
-    title.textContent = `${first || "날짜 없음"} · ${job.results?.length || 0}건`;
+    title.textContent = `${first || "날짜 없음"} · ${job.results?.length || 0}개 기간`;
     summary.textContent = job.status === "running"
       ? "처리 중"
       : `${counts.saved} 완료 · ${counts.exists + counts.overlap} 제외${counts.unknown ? ` · ${counts.unknown} 확인 필요` : ""}`;
@@ -313,7 +317,7 @@ function showJob(job, remember = true) {
     unresolvedJob = false;
     cancelRequested = Boolean(job.cancelRequested);
     rememberJob(batchRunning ? job.id : undefined);
-    requestedJobId = job.id;
+    requestedJobId = batchRunning ? job.id : undefined;
   }
   state.activeJob = job;
   const counts = countStatuses(job);
@@ -321,8 +325,8 @@ function showJob(job, remember = true) {
   const total = job.results?.length || 0;
   const needsCheck = job.status !== "done" || job.outcome === "partial" || job.outcome === "cancelled";
   const message = jobRunning
-    ? `${cancelRequested ? "중단 요청됨" : "신청 처리 중"} · ${completed}/${total}건 확인`
-    : `${job.message || "처리가 끝났습니다."} · ${counts.saved}건 완료, ${counts.exists + counts.overlap}건 제외${counts.unknown ? `, ${counts.unknown}건 확인 필요` : ""}`;
+    ? `${cancelRequested ? "중단 요청됨" : "신청 처리 중"} · ${completed}/${total}개 기간 확인`
+    : `${job.message || "처리가 끝났습니다."} · ${counts.saved}개 기간 완료, ${counts.exists + counts.overlap}개 제외${counts.unknown ? `, ${counts.unknown}개 확인 필요` : ""}`;
   show(message, jobRunning ? "" : needsCheck ? "error" : "success");
   renderHistory();
   if (remember) updateControls();
@@ -339,7 +343,7 @@ async function loadHistory() {
 async function loadApplications() {
   const { applications } = await api("/api/applications");
   state.applications = applications || [];
-  renderCalendar();
+  updateSelection();
 }
 
 function scheduleJob(id, delay = pollDelay) {
@@ -398,18 +402,28 @@ async function submitJob(plan, id) {
   }
 }
 
-async function loadDashboard() {
+async function loadDashboard(initial = {}) {
   updateSelection();
-  const results = await Promise.allSettled([loadHistory(), loadApplications()]);
+  const tasks = [];
+  if (Array.isArray(initial.jobs)) {
+    state.jobs = initial.jobs;
+    renderHistory();
+  } else tasks.push(loadHistory());
+  if (Array.isArray(initial.applications)) {
+    state.applications = initial.applications;
+    updateSelection();
+  } else tasks.push(loadApplications());
+  const results = await Promise.allSettled(tasks);
   const failed = results.find(result => result.status === "rejected");
-  if (failed) show(failed.reason.message, "error");
+  const loadError = initial.applicationsError || failed?.reason.message;
+  if (loadError) show(loadError, "error");
   const running = state.jobs.find(job => job.status === "running");
   if (requestedJobId || running) {
     unresolvedJob = true;
     await refreshJob(requestedJobId || running.id);
   } else {
     updateControls();
-    if (!failed) show("달력에서 날짜를 선택하거나 자동 선택을 이용하세요.");
+    if (!loadError) show("달력에서 날짜를 선택하거나 자동 선택을 이용하세요.");
   }
 }
 
@@ -421,17 +435,16 @@ loginForm.addEventListener("submit", async event => {
   setBusy(true);
   showLogin("학교 포털 로그인을 확인하고 있습니다…");
   try {
-    await api("/api/login", {
+    const session = await api("/api/login", {
       method: "POST",
       headers: setupToken ? { "X-Setup-Token": setupToken } : {},
       body: JSON.stringify(credentials),
     });
     loginForm.reset();
     showLogin();
-    const session = await api("/api/session");
     configureSession(session);
     setConnected(true);
-    await loadDashboard();
+    await loadDashboard(session);
   } catch (error) {
     try {
       const session = await api("/api/session");
@@ -453,14 +466,12 @@ requestForm.addEventListener("submit", async event => {
   event.preventDefault();
   const dates = activeDates();
   if (!dates.length) return;
-  const body = manualMode.checked
-    ? { dates }
-    : { range: checkedValue("range"), pattern: checkedValue("pattern"), weekdays: selectedWeekdays() };
+  const body = { dates };
   setBusy(true);
   try {
     const preview = await api("/api/batch/preview", { method: "POST", body: JSON.stringify(body) });
     const first = preview.dates[0], last = preview.dates.at(-1);
-    if (!window.confirm(`${first} ~ ${last}\n총 ${preview.dates.length}일을 각각 1일씩 신청할까요?\n기존 신청과 겹치는 날짜는 자동으로 제외됩니다.`)) return;
+    if (!window.confirm(`${first} ~ ${last}\n총 ${preview.dates.length}일을 ${preview.periods.length}개 기간으로 묶어 신청할까요?\n한 기간은 최대 7박 8일이며 기존 신청일은 제외됩니다.`)) return;
     await submitJob(preview.plan, preview.id);
   } catch (error) { show(error.message, "error"); }
   finally { setBusy(false); }

@@ -4,7 +4,7 @@ import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { MAX_BATCH_DATES, buildBatchDates, localIsoDate, parseIsoDate, residencyHorizons, validatePeriod } from "../extension/core.mjs";
+import { MAX_BATCH_DATES, buildBatchDates, groupBatchDates, localIsoDate, parseIsoDate, residencyHorizons, validatePeriod } from "../extension/core.mjs";
 import { PortalError, TukoreaPortal } from "./portal.mjs";
 import { HttpError } from "./errors.mjs";
 
@@ -86,11 +86,18 @@ export function createApplication({
   secureCookie ||= Boolean(publicOrigin);
   const busy = new Map();
   const rates = new Map();
+  const requestProfiles = new WeakMap();
   let stopping = false;
   const cookie = (token, maxAge = 31_536_000) => [
     sessionCookieName + "=" + token, "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=" + maxAge, secureCookie ? "Secure" : "",
   ].filter(Boolean).join("; ");
-  const profileFrom = (request, credentials = false) => store.find(cookieValue(request), { credentials, now: now().getTime() });
+  const profileFrom = async (request, credentials = false) => {
+    const cached = requestProfiles.get(request);
+    if (cached && (!credentials || cached.credentials)) return cached;
+    const profile = await store.find(cookieValue(request), { credentials, now: now().getTime() });
+    if (profile) requestProfiles.set(request, profile);
+    return profile;
+  };
   const requireProfile = async (request, credentials = false) => {
     const profile = await profileFrom(request, credentials);
     if (!profile) throw new HttpError(401, "학교 포털에 먼저 로그인해 주세요.");
@@ -124,7 +131,7 @@ export function createApplication({
     const timestamp = now().getTime();
     for (const [key, value] of rates) if (value.until <= timestamp) rates.delete(key);
     // 로그인 시도만 IP로 제한하고, 인증된 조회는 프록시 뒤에서도 계정별로 제한한다.
-    const profile = auth ? null : await profileFrom(request);
+    const profile = auth ? null : await profileFrom(request, true);
     const key = auth ? "auth:" + clientAddress(request) : profile ? "profile:" + profile.id : "anonymous:" + clientAddress(request);
     if (store.consumeRate) return store.consumeRate(key, auth ? 10 : 120, 60_000);
     if (!rates.has(key)) {
@@ -240,19 +247,34 @@ export function createApplication({
       if (!/^[A-Za-z0-9]{4,32}$/.test(credentials.studentId) || typeof credentials.password !== "string" || credentials.password.length < 1 || credentials.password.length > 256) throw new HttpError(400, "학번과 비밀번호를 확인해 주세요.");
       if (store.consumeRate) await store.consumeRate("school-login:" + credentials.studentId.toLowerCase(), 5, 60_000);
       const registrationKey = "registration:" + createHmac("sha256", store.key).update(credentials.studentId.toLowerCase()).digest("hex");
-      const profile = await withBusy(registrationKey, async () => {
-        await portalFactory(credentials).login();
+      const login = await withBusy(registrationKey, async () => {
+        const portal = portalFactory(credentials);
+        await portal.login();
         const existing = await store.reconnect(credentials, { now: now().getTime() });
-        if (existing) return existing;
-        const supplied = Buffer.from(String(request.headers["x-setup-token"] || ""));
-        const expected = Buffer.from(setupToken);
-        const validSetup = setupToken && supplied.length === expected.length && timingSafeEqual(supplied, expected);
-        if (!publicRegistration && !validSetup) throw new HttpError(403, "현재는 새 사용자 로그인을 받을 수 없습니다.");
-        if (validSetup && await store.setupUsed(setupToken)) throw new HttpError(410, "이 로그인 링크는 이미 사용되었습니다.");
-        return store.create(credentials, validSetup ? setupToken : "");
+        let profile = existing;
+        if (!profile) {
+          const supplied = Buffer.from(String(request.headers["x-setup-token"] || ""));
+          const expected = Buffer.from(setupToken);
+          const validSetup = setupToken && supplied.length === expected.length && timingSafeEqual(supplied, expected);
+          if (!publicRegistration && !validSetup) throw new HttpError(403, "현재는 새 사용자 로그인을 받을 수 없습니다.");
+          if (validSetup && await store.setupUsed(setupToken)) throw new HttpError(410, "이 로그인 링크는 이미 사용되었습니다.");
+          profile = await store.create(credentials, validSetup ? setupToken : "");
+        }
+        try { return { profile, applications: await portal.applications() }; }
+        catch (error) {
+          return {
+            profile, applications: [],
+            applicationsError: error instanceof PortalError ? error.message : "학교 신청내역을 불러오지 못했습니다.",
+          };
+        }
       });
-      response.setHeader("Set-Cookie", cookie(profile.token));
-      return sendJson(response, 201, { connected: true });
+      response.setHeader("Set-Cookie", cookie(login.profile.token));
+      const today = localIsoDate(koreaNow(now()));
+      return sendJson(response, 201, {
+        connected: true, today, horizons: residencyHorizons(today), createdAt: login.profile.createdAt,
+        applications: login.applications, applicationsError: login.applicationsError,
+        jobs: await store.jobs(login.profile.id),
+      });
     }
     if (request.method === "POST" && ["/api/register", "/api/reconnect"].includes(url.pathname)) {
       const body = await readJson(request);
@@ -281,25 +303,29 @@ export function createApplication({
     if (request.method === "POST" && url.pathname === "/api/batch/preview") {
       const profile = await requireProfile(request);
       const dates = batchDatesFrom(await readJson(request), koreaNow(now()));
+      const periods = groupBatchDates(dates);
       const id = randomUUID();
       const payload = Buffer.from(JSON.stringify({ id, profileId: profile.id, dates, expires: now().getTime() + 600_000 })).toString("base64url");
-      return sendJson(response, 200, { id, dates, plan: payload + "." + sign(payload), message: "총 " + dates.length + "건을 각각 1일씩 신청합니다." });
+      return sendJson(response, 200, {
+        id, dates, periods, plan: payload + "." + sign(payload),
+        message: `총 ${dates.length}일을 ${periods.length}개 기간으로 신청합니다.`,
+      });
     }
     if (request.method === "POST" && url.pathname === "/api/batch/apply") {
       const body = await readJson(request);
       const profile = await requireProfile(request, true);
       const plan = decodePlan(body.plan, profile);
+      const periods = groupBatchDates(plan.dates).map(({ start, end }) => ({ date: start.replaceAll("-", ""), end: end.replaceAll("-", "") }));
       const existing = await store.job(profile.id, plan.id);
       if (existing) {
-        matchJob(existing, plan.dates.map(date => ({ date: date.replaceAll("-", "") })));
+        matchJob(existing, periods);
         if (enqueue && existing.status === "running") await enqueue(existing.id);
         return sendJson(response, 200, { job: existing });
       }
       if (plan.expires <= now().getTime()) throw new HttpError(409, "미리보기가 만료되었습니다. 대상 날짜를 다시 확인해 주세요.");
       for (const date of plan.dates) periodFrom({ start: date }, koreaNow(now()));
       // HTTP 연결이 끊겨도 진행 결과는 DB에 남기며 재요청은 동일 작업을 반환한다.
-      const dates = plan.dates.map(date => date.replaceAll("-", ""));
-      const job = await startJob(profile, plan.id, dates, options => portalFactory(profile.credentials).applyMany(dates, options));
+      const job = await startJob(profile, plan.id, periods, options => portalFactory(profile.credentials).applyMany(periods, options));
       return sendJson(response, 202, { job });
     }
     if (request.method === "POST" && url.pathname === "/api/batch/cancel") {

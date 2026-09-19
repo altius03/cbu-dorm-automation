@@ -254,7 +254,8 @@ try {
 
   const batch = await call("/api/batch/apply", { method: "POST", token, body: { plan: preview.body.plan } });
   assert.equal(batch.status, 202);
-  assert.equal(batch.body.job.results.length, preview.body.dates.length);
+  assert.equal(batch.body.job.results.length, preview.body.periods.length);
+  assert.ok(batch.body.job.results.every(period => period.end >= period.date));
   const cancelled = await otherInstance("/api/batch/cancel", { method: "POST", token, body: { id: batch.body.job.id } });
   assert.equal(cancelled.body.job.cancelRequested, true);
   const history = await otherInstance("/api/batch/history", { token });

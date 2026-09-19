@@ -421,10 +421,12 @@ export class TukoreaPortal {
     this.password = password;
     this.http = new SessionFetch();
     this.session = {};
+    this.authenticated = false;
     this.now = now;
   }
 
   async login() {
+    if (this.authenticated) return this.session;
     try {
       const returnUrl = `${DREAM}/nx/`;
       const loginUrl = `${SSO}/sso/login_stand.jsp?returnurl=${returnUrl}`;
@@ -464,6 +466,7 @@ export class TukoreaPortal {
         throw new PortalError("학교 포털 로그인에 실패했습니다. 학번과 비밀번호를 확인해 주세요.");
       }
       this.session = login.datasets.DS_SESSIONINFO?.[0] || {};
+      this.authenticated = true;
       return this.session;
     } catch (error) {
       if (error instanceof PortalError) throw error;
@@ -530,7 +533,7 @@ export class TukoreaPortal {
     return { userId, userName };
   }
 
-  async applicationContext() {
+  async applicationContext({ requireResident = true } = {}) {
     await this.login();
     const { userId, userName } = await this.profile();
     const termResult = await this.transaction(
@@ -545,13 +548,16 @@ export class TukoreaPortal {
       columns: ["yy", "tmGbn", "schregNo", "stdKorNm", "outStayStGbn"],
       row: { yy: term.yy, tmGbn: term.tmGbn, schregNo: userId, stdKorNm: userName },
     };
-    const residentResult = await this.transaction(
-      `/aff/dorm/DormCtr/findMdstrmLeaveAplyList.do?${MENU}`,
-      condition,
-    );
-    const resident = residentResult.datasets.DS_DORM100?.[0];
-    if (!resident?.livstuNo || resident.livstuStGbn !== "2" || (resident.schregNo && resident.schregNo !== userId)) {
-      throw new PortalError("현재 생활관 입주 중인 학생만 외박신청할 수 있습니다.");
+    let resident;
+    if (requireResident) {
+      const residentResult = await this.transaction(
+        `/aff/dorm/DormCtr/findMdstrmLeaveAplyList.do?${MENU}`,
+        condition,
+      );
+      resident = residentResult.datasets.DS_DORM100?.[0];
+      if (!resident?.livstuNo || resident.livstuStGbn !== "2" || (resident.schregNo && resident.schregNo !== userId)) {
+        throw new PortalError("현재 생활관 입주 중인 학생만 외박신청할 수 있습니다.");
+      }
     }
 
     const list = async () => {
@@ -561,7 +567,7 @@ export class TukoreaPortal {
         if (!Array.isArray(rows) || rows.some(row =>
           compactDate(row.outStayFrDt).epochDay > compactDate(row.outStayToDt).epochDay ||
           !/^\d+$/.test(row.outStayStGbn || "") || (row.schregNo && row.schregNo !== userId) ||
-          (row.livstuNo && row.livstuNo !== resident.livstuNo),
+          (resident && row.livstuNo && row.livstuNo !== resident.livstuNo),
         )) throw new Error();
       } catch { throw new PortalError("기존 신청 내역을 확인할 수 없습니다. 신청을 중단합니다."); }
       return rows;
@@ -570,7 +576,7 @@ export class TukoreaPortal {
   }
 
   async applications() {
-    const { list } = await this.applicationContext();
+    const { list } = await this.applicationContext({ requireResident: false });
     return (await list()).map(row => ({
       start: compactDate(row.outStayFrDt).iso,
       end: compactDate(row.outStayToDt).iso,
@@ -617,15 +623,18 @@ export class TukoreaPortal {
     }
 
     if (await shouldStop()) return { status: "cancelled", message: "신청을 중단했습니다." };
-    const { count } = await this.saveAndVerify(context, start, end);
+    const saved = await this.saveAndVerify(context, start, end, shouldStop);
+    if (saved.cancelled) return { status: "cancelled", message: "신청을 중단했습니다." };
+    const { count } = saved;
     return {
       status: "saved",
       message: `외박신청이 완료되었습니다: ${label}${count ? ` (현재 자유외박 ${count}회)` : ""}`,
     };
   }
 
-  async saveAndVerify(context, start, end) {
+  async saveAndVerify(context, start, end, shouldStop = () => false) {
     validateApplicationPeriod(start, end, this.now());
+    if (await shouldStop()) return { cancelled: true };
     let count;
     try { count = await this.saveApplication(context, start, end); }
     catch (error) {
@@ -641,13 +650,22 @@ export class TukoreaPortal {
     return { count, rows };
   }
 
-  async applyMany(dates, { onProgress = () => {}, shouldStop = () => false } = {}) {
-    if (!Array.isArray(dates) || !dates.length || dates.length > MAX_BATCH_DATES ||
-        dates.some(date => typeof date !== "string" || !/^\d{8}$/.test(date)) || new Set(dates).size !== dates.length) {
+  async applyMany(periods, { onProgress = () => {}, shouldStop = () => false } = {}) {
+    if (!Array.isArray(periods) || !periods.length || periods.length > MAX_BATCH_DATES) {
       throw new PortalError("일괄신청 날짜가 올바르지 않습니다.");
     }
-    for (const date of dates) validateApplicationPeriod(date, date, this.now());
-    const results = dates.map(date => ({ date, status: "not_attempted" }));
+    const results = periods.map(period => {
+      const date = typeof period === "string" ? period : period?.date;
+      const end = typeof period === "string" ? period : period?.end || date;
+      if (typeof date !== "string" || typeof end !== "string" || !/^\d{8}$/.test(date) || !/^\d{8}$/.test(end)) {
+        throw new PortalError("일괄신청 날짜가 올바르지 않습니다.");
+      }
+      validateApplicationPeriod(date, end, this.now());
+      return { date, end, status: "not_attempted" };
+    }).sort((left, right) => left.date.localeCompare(right.date));
+    if (results.some((period, index) => index && period.date <= results[index - 1].end)) {
+      throw new PortalError("겹치는 일괄신청 기간이 있습니다.");
+    }
     let cancelled = false;
     let stoppedReason = "";
     const report = () => {
@@ -655,7 +673,7 @@ export class TukoreaPortal {
       const partial = summary.unknown > 0 || summary.not_attempted > 0;
       return {
         status: cancelled ? "cancelled" : partial ? "partial" : "batch", summary, results: results.map(item => ({ ...item })),
-        message: `${cancelled ? "일괄신청을 중단했습니다. " : stoppedReason ? `${stoppedReason} ` : ""}${summary.saved}건 신청 완료, ${summary.exists + summary.overlap}건 기존 신청으로 제외, ${summary.unknown}건 확인 필요, ${summary.not_attempted}건 미처리`,
+        message: `${cancelled ? "일괄신청을 중단했습니다. " : stoppedReason ? `${stoppedReason} ` : ""}${summary.saved}개 기간 신청 완료, ${summary.exists + summary.overlap}개 기존 신청으로 제외, ${summary.unknown}개 확인 필요, ${summary.not_attempted}개 미처리`,
       };
     };
     if (await shouldStop()) { cancelled = true; return report(); }
@@ -664,8 +682,8 @@ export class TukoreaPortal {
 
     for (const item of results) {
       if (await shouldStop()) { cancelled = true; break; }
-      const { date } = item;
-      const conflict = findConflict(rows, date, date);
+      const { date, end } = item;
+      const conflict = findConflict(rows, date, end);
       if (conflict) {
         item.status = conflict.type === "same" ? "exists" : "overlap";
         await onProgress(report());
@@ -676,7 +694,9 @@ export class TukoreaPortal {
       await onProgress(report());
       if (await shouldStop()) { item.status = "not_attempted"; cancelled = true; break; }
       try {
-        ({ rows } = await this.saveAndVerify(context, date, date));
+        const saved = await this.saveAndVerify(context, date, end, shouldStop);
+        if (saved.cancelled) { item.status = "not_attempted"; cancelled = true; break; }
+        ({ rows } = saved);
         item.status = "saved";
       } catch (error) {
         if (error.code === "INVALID_PERIOD") { item.status = "not_attempted"; stoppedReason = error.message; }

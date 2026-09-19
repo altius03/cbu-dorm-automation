@@ -90,7 +90,28 @@ function datesFrom(epochDay, count) {
 }
 
 function weekends(dates) {
-  return dates.filter(value => [0, 6].includes(new Date(`${value}T00:00:00Z`).getUTCDay()));
+  return dates.filter(value => [0, 5, 6].includes(new Date(`${value}T00:00:00Z`).getUTCDay()));
+}
+
+export function groupBatchDates(dates) {
+  if (!Array.isArray(dates) || !dates.length || dates.length > MAX_BATCH_DATES) {
+    throw new Error("선택한 날짜를 확인해 주세요.");
+  }
+  const parsed = dates.map(parseIsoDate).sort((left, right) => left.epochDay - right.epochDay);
+  if (new Set(parsed.map(date => date.iso)).size !== parsed.length) throw new Error("중복된 날짜를 선택할 수 없습니다.");
+
+  const periods = [];
+  let start = parsed[0], end = parsed[0];
+  for (const date of parsed.slice(1)) {
+    if (date.epochDay === end.epochDay + 1 && date.epochDay - start.epochDay < 8) {
+      end = date;
+    } else {
+      periods.push({ start: start.iso, end: end.iso });
+      start = end = date;
+    }
+  }
+  periods.push({ start: start.iso, end: end.iso });
+  return periods;
 }
 
 export function residencyHorizons(todayValue = localIsoDate()) {

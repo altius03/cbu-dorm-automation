@@ -22,8 +22,9 @@ for (const endpoint of ["/api/login", "/api/applications", "/api/batch/history",
 }
 assert.match(script, /state\.activeJob = job;[\s\S]*renderCalendar/);
 assert.match(script, /status-saved|`status-\$\{mark\}`/);
-assert.match(script, /manualMode\.checked[\s\S]*\{ dates \}/);
-assert.match(script, /range: checkedValue\("range"\)[\s\S]*pattern: checkedValue\("pattern"\)/);
+assert.match(script, /const body = \{ dates \}/);
+assert.match(script, /pattern === "weekends"[\s\S]*day === 5/);
+assert.match(script, /preview\.periods\.length/);
 assert.doesNotMatch(script, /innerHTML|eval\(/);
 
 const syntax = spawnSync(process.execPath, ["--check", fileURLToPath(scriptUrl)], { encoding: "utf8" });

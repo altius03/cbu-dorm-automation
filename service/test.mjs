@@ -110,7 +110,7 @@ try {
   assert.deepEqual(partial.results.map(row => row.status), ["exists", "saved", "unknown", "not_attempted"]);
   assert.equal(progress[1].results[1].status, "unknown");
   assert.equal(partial.status, "partial");
-  await assert.rejects(portal.applyMany(["20990101", "20990101"]), /날짜/);
+  await assert.rejects(portal.applyMany(["20990101", "20990101"]), /겹치는/);
 
   const httpStore = new CredentialStore(join(directory, "http"));
   const owner = httpStore.create({ studentId: "owner0001", password: "fake-password" });
@@ -123,11 +123,11 @@ try {
   const appOptions = {
     store: httpStore, now: () => clock, logger: entry => logs.push(entry),
     portalFactory: () => ({
-      applyMany: async (dates, { onProgress }) => {
+      applyMany: async (periods, { onProgress }) => {
         batchCalls++;
-        await onProgress({ message: "processing", results: dates.map(date => ({ date, status: "unknown" })) });
+        await onProgress({ message: "processing", results: periods.map(period => ({ ...period, status: "unknown" })) });
         await batchGate;
-        return { status: "batch", message: "done", results: dates.map(date => ({ date, status: "saved" })) };
+        return { status: "batch", message: "done", results: periods.map(period => ({ ...period, status: "saved" })) };
       },
       apply: async () => { throw new Error("unexpected single request"); },
     }),
@@ -147,9 +147,10 @@ try {
   const preview = await call(app, "/api/batch/preview", { token: owner.token, body: { kind: "daily-month" } });
   assert.equal(preview.body.dates.length, 30);
   assert.equal(preview.body.dates.at(-1), "2026-10-18");
+  assert.equal(preview.body.periods.length, 4);
   assert.equal(batchCalls, 0);
   const semester = await call(app, "/api/batch/preview", { token: owner.token, body: { range: "semester", pattern: "weekends" } });
-  assert.equal(semester.body.dates.length, 28);
+  assert.equal(semester.body.dates.length, 41);
   assert.equal(semester.body.dates.at(-1), "2026-12-20");
   const manual = await call(app, "/api/batch/preview", { token: owner.token, body: { dates: ["2026-09-21", "2026-09-20"] } });
   assert.deepEqual(manual.body.dates, ["2026-09-20", "2026-09-21"]);

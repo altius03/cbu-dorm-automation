@@ -137,6 +137,22 @@ for (const [status, location, options] of [
   ]) { rows = [row]; await assert.rejects(context.list(), /기존 신청 내역/); }
 }
 
+// Read-only history skips the resident-detail request; applying still requires it.
+{
+  const portal = new TukoreaPortal("fixture-student", "fixture-password");
+  const paths = [];
+  portal.login = async () => {};
+  portal.profile = async () => ({ userId: "fixture-student", userName: "Fixture" });
+  portal.transaction = async path => {
+    paths.push(path);
+    if (path.includes("findYyTmGbnList")) return { datasets: { DS_DORM010: [{ yy: "2026", tmGbn: "20" }] } };
+    if (path.includes("findStayAplyList")) return { datasets: { DS_DORM120: [] } };
+    throw new Error("resident lookup must not run for read-only history");
+  };
+  assert.deepEqual(await portal.applications(), []);
+  assert.equal(paths.some(path => path.includes("findMdstrmLeaveAplyList")), false);
+}
+
 function fakePortal(now = () => new Date("2026-09-19T03:00:00Z")) {
   const portal = new TukoreaPortal("fixture-student", "fixture-password", { now });
   const stats = { contexts: 0, saves: 0, rows: [] };

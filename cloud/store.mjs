@@ -16,12 +16,13 @@ function datesForJob(dates) {
   const result = dates.map(item => {
     const date = typeof item === "string" ? item : item?.date;
     const end = typeof item === "string" ? item : item?.end || date;
+    const parsed = [];
     for (const value of [date, end]) {
       if (typeof value !== "string" || !/^\d{8}$/.test(value)) throw new HttpError(400, "신청 날짜를 확인해 주세요.");
-      try { parseIsoDate(value.slice(0, 4) + "-" + value.slice(4, 6) + "-" + value.slice(6)); }
+      try { parsed.push(parseIsoDate(value.slice(0, 4) + "-" + value.slice(4, 6) + "-" + value.slice(6))); }
       catch { throw new HttpError(400, "신청 날짜를 확인해 주세요."); }
     }
-    if (end < date) throw new HttpError(400, "신청 기간을 확인해 주세요.");
+    if (end < date || parsed[1].epochDay - parsed[0].epochDay >= 8) throw new HttpError(400, "신청 기간을 확인해 주세요.");
     return { date, end, status: "not_attempted" };
   });
   if (new Set(result.map(row => row.date)).size !== result.length) throw new HttpError(400, "중복된 신청 날짜입니다.");

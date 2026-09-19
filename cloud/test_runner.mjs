@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 
 import { TukoreaPortal } from "../service/portal.mjs";
-import { runNext } from "./runner.mjs";
+import { runChunk, runNext } from "./runner.mjs";
 
 const PRIVATE = "fixture-secret-that-must-not-leave-the-step";
 const credentials = { studentId: "fixture-student", password: PRIVATE };
 
 // Atomic in-memory implementation of the runner's store contract; no database or school calls.
 function fakeStore(dates = ["20990101"]) {
-  const job = { id: "fixture-job", status: "running", cancelRequested: false, results: dates.map(date => ({ date, status: "not_attempted" })) };
+  const job = {
+    id: "fixture-job", status: "running", cancelRequested: false,
+    results: dates.map(item => typeof item === "string"
+      ? { date: item, status: "not_attempted" }
+      : { date: item.date, end: item.end || item.date, status: "not_attempted" }),
+  };
   let current = null;
   let clock = 0;
   let serial = 0;
@@ -50,12 +55,12 @@ function fakeSchool(store) {
     assert.deepEqual(value, credentials);
     stats.credentials++;
     return {
-      async apply(date, end, { shouldStop }) {
+      async saveAndVerify(_context, date, end, shouldStop) {
         assert.equal(store.job.results.find(row => row.date === date)?.status, "unknown", "unknown must be durable before school work");
-        if (await shouldStop()) return { status: "cancelled" };
+        if (await shouldStop()) return { cancelled: true };
         stats.writes++;
         stats.rows.push({ outStayFrDt: date, outStayToDt: end, outStayStGbn: "1" });
-        return { status: "saved", message: PRIVATE };
+        return { rows: stats.rows.map(row => ({ ...row })) };
       },
       async applicationContext() {
         stats.reads++;
@@ -84,7 +89,7 @@ function fakeSchool(store) {
   const ready = new Promise(resolve => { entered = resolve; });
   const portalFactory = credentials => {
     const portal = school.portalFactory(credentials);
-    return { ...portal, apply: async (...args) => { entered(); await gate; return portal.apply(...args); } };
+    return { ...portal, saveAndVerify: async (...args) => { entered(); await gate; return portal.saveAndVerify(...args); } };
   };
   const first = runNext(store.job.id, { store, portalFactory });
   await ready;
@@ -103,7 +108,7 @@ function fakeSchool(store) {
   store.expire();
   assert.equal(await runNext(store.job.id, { store, ...school }), "done");
   assert.equal(store.job.results[0].status, "exists");
-  assert.equal(school.stats.reads, 1);
+  assert.equal(school.stats.reads, 2);
   assert.equal(school.stats.writes, 1, "crash after POST must reconcile without a second POST");
 }
 {
@@ -115,7 +120,7 @@ function fakeSchool(store) {
   const ready = new Promise(resolve => { entered = resolve; });
   const portalFactory = credentials => {
     const portal = school.portalFactory(credentials);
-    return { ...portal, apply: async (...args) => { entered(); await gate; return portal.apply(...args); } };
+    return { ...portal, saveAndVerify: async (...args) => { entered(); await gate; return portal.saveAndVerify(...args); } };
   };
   const stale = runNext(store.job.id, { store, portalFactory });
   await ready;
@@ -176,11 +181,25 @@ for (const [failure, expected] of [
   let calls = 0;
   assert.equal(await runNext(store.job.id, {
     store,
-    portalFactory: () => ({ apply: async () => { calls++; throw failure; } }),
+    portalFactory: () => ({
+      applicationContext: async () => ({ list: async () => [] }),
+      saveAndVerify: async () => { calls++; throw failure; },
+    }),
   }), "done");
   assert.equal(store.job.results[0].status, expected);
   assert.equal(calls, 1);
   assert.equal(JSON.stringify(store.job).includes(PRIVATE), false);
+}
+{
+  const store = fakeStore([
+    { date: "20990101", end: "20990108" },
+    { date: "20990109", end: "20990116" },
+  ]);
+  const school = fakeSchool(store);
+  assert.equal(await runChunk(store.job.id, { store, ...school }), "done");
+  assert.equal(school.stats.credentials, 1, "one workflow chunk must reuse one school login");
+  assert.equal(school.stats.reads, 1, "one workflow chunk must reuse one application context");
+  assert.equal(school.stats.writes, 2);
 }
 {
   const store = fakeStore();

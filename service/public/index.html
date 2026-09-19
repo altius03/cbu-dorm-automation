@@ -214,7 +214,7 @@
               </div>
 
               <section id="manual-controls">
-                <p class="control-copy">달력에서 외박할 날짜를 누르세요. 선택한 날짜는 각각 1일씩 신청됩니다.</p>
+                <p class="control-copy">달력에서 외박할 날짜를 누르세요. 연속된 날짜는 최대 7박 8일씩 묶어 신청합니다.</p>
               </section>
 
               <section id="auto-controls" hidden>
@@ -230,9 +230,9 @@
                 <fieldset class="options-section">
                   <legend>어떤 날을</legend>
                   <div class="choice-list">
-                    <label class="choice"><input type="radio" name="pattern" value="daily" /><span><strong>매일</strong><small>하루씩 각각 신청</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekdays" /><span><strong>평일 전체</strong><small>월요일부터 금요일</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekends" checked /><span><strong>주말 전체</strong><small>토요일과 일요일</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="daily" /><span><strong>매일</strong><small>최대 7박 8일씩 묶어서</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekdays" /><span><strong>평일 전체</strong><small>월요일부터 금요일까지 묶어서</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekends" checked /><span><strong>주말 전체</strong><small>금요일부터 일요일까지 묶어서</small></span></label>
                     <label class="choice"><input type="radio" name="pattern" value="custom" /><span><strong>지정 요일</strong><small>원하는 요일만 반복</small></span></label>
                   </div>
                   <div id="custom-weekdays" hidden>

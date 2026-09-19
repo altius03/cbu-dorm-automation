@@ -1,6 +1,6 @@
 import { sleep } from "workflow";
 import { getStore } from "../runtime.mjs";
-import { runNext } from "../runner.mjs";
+import { runChunk } from "../runner.mjs";
 
 export async function applyOvernight(jobId) {
   "use workflow";
@@ -8,7 +8,7 @@ export async function applyOvernight(jobId) {
   for (;;) {
     let result;
     try {
-      result = await nextDate(jobId);
+      result = await nextChunk(jobId);
       failures = 0;
     } catch {
       // ponytail: recover transient outages for about an hour; a longer outage
@@ -22,9 +22,9 @@ export async function applyOvernight(jobId) {
   }
 }
 
-async function nextDate(jobId) {
+async function nextChunk(jobId) {
   "use step";
   // Only this opaque ID and the control string enter Workflow's persisted history.
-  try { return await runNext(jobId, { store: getStore() }); }
+  try { return await runChunk(jobId, { store: getStore() }); }
   catch { throw new Error("신청 작업을 재확인하고 있습니다."); }
 }
