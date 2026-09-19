@@ -491,7 +491,7 @@ refreshButton.addEventListener("click", async () => {
   try {
     await Promise.all([loadHistory(), loadApplications()]);
     if (requestedJobId) await refreshJob(requestedJobId);
-    else show("학교 신청내역을 새로 불러왔습니다.", "success");
+    else show("");
   } catch (error) { show(error.message, "error"); }
   finally { setBusy(false); }
 });
