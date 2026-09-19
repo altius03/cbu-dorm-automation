@@ -122,11 +122,12 @@ export function validateResidencySchedule(value) {
   }
   const source = typeof value.source === "string" ? value.source.trim() : "";
   if (!source || source.length > 200) throw new Error("생활관 일정 출처를 확인해 주세요.");
-  const from = parseIsoDate(value.from).iso;
-  const through = parseIsoDate(value.through).iso;
-  const semester = parseIsoDate(value.ends?.semester).iso;
-  const sixMonths = parseIsoDate(value.ends?.sixMonths).iso;
-  const twelveMonths = parseIsoDate(value.ends?.twelveMonths).iso;
+  const date = input => input instanceof Date ? input.toISOString().slice(0, 10) : input;
+  const from = parseIsoDate(date(value.from)).iso;
+  const through = parseIsoDate(date(value.through)).iso;
+  const semester = parseIsoDate(date(value.ends?.semester)).iso;
+  const sixMonths = parseIsoDate(date(value.ends?.sixMonths)).iso;
+  const twelveMonths = parseIsoDate(date(value.ends?.twelveMonths)).iso;
   if (from > through || semester < from || sixMonths < semester || twelveMonths < sixMonths) {
     throw new Error("생활관 일정 날짜 순서를 확인해 주세요.");
   }

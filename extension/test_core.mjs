@@ -78,6 +78,10 @@ const configured = [{
 }];
 assert.equal(buildBatchDates({ range: "semester", pattern: "daily" }, "2027-02-14", configured).at(-1), "2027-06-23");
 assert.equal(residencyHorizons("2027-02-14", configured)[0].source, "fixture official notice");
+assert.equal(validateResidencySchedule({
+  ...configured[0], from: new Date("2027-02-14T00:00:00Z"),
+  ends: { ...configured[0].ends, semester: new Date("2027-06-23T00:00:00Z") },
+}).ends.semester, "2027-06-23");
 assert.throws(() => validateResidencySchedule({ ...configured[0], ends: { ...configured[0].ends, semester: "2026-01-01" } }), /날짜 순서/);
 
 console.log("extension core checks passed");
