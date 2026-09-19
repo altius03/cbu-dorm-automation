@@ -20,7 +20,7 @@ export default async function handler(request, response) {
         localPort: !process.env.VERCEL && process.env.NODE_ENV === "development" ? Number(process.env.PORT || 8789) : undefined,
         publicRegistration: process.env.OVERNIGHT_PUBLIC_REGISTRATION === "1",
         setupToken: process.env.OVERNIGHT_SETUP_TOKEN || "",
-        page: Buffer.from(html.replace("이 Mac에 저장합니다", "서버에 저장합니다")),
+        page: Buffer.from(html),
         script: Buffer.from(script),
         clientAddress: req => {
           const value = process.env.VERCEL ? req.headers["x-vercel-forwarded-for"] : req.socket.remoteAddress;

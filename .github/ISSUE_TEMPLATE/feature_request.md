@@ -1,20 +1,19 @@
 ---
-name: Feature request
-about: Suggest an idea for this project
-title: ''
+name: 기능 제안
+about: 필요한 기능이나 개선점을 제안해 주세요
+title: '[제안] '
 labels: ''
 assignees: ''
-
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+## 해결하려는 문제
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+현재 어떤 점이 불편한지 적어 주세요.
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
+## 제안
 
-**Additional context**
-Add any other context or screenshots about the feature request here.
+원하는 동작과 사용 흐름을 적어 주세요.
+
+## 범위
+
+Vercel, 로컬, Chrome 확장 중 어디에 필요한 기능인지 알려 주세요.

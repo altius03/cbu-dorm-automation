@@ -30,6 +30,12 @@
       #status[data-kind="success"] { color: #0c6b3d; background: #e9f8ef; }
       #status[data-kind="error"] { color: #a12626; background: #fff0f0; }
       [hidden] { display: none !important; }
+      @media (max-width: 480px) {
+        main { width: 100%; padding: 0; }
+        .card { min-height: 100vh; padding: 24px 18px; border: 0; border-radius: 0; box-shadow: none; }
+        input, select, button { min-height: 48px; font-size: 16px; }
+        .actions { grid-template-columns: 1fr; }
+      }
     </style>
   </head>
   <body>
@@ -48,7 +54,7 @@
             <button class="primary" type="submit">계정 연결</button>
             <button id="reconnect" class="secondary" type="button">저장된 계정 다시 연결</button>
           </form>
-          <p class="notice">학교 로그인에 성공한 뒤 계정 정보를 암호화해 이 Mac에 저장합니다. 이후 자동 로그인에 사용하며, 연결 후 저장된 계정을 삭제할 수 있습니다.</p>
+          <p class="notice">학교 로그인에 성공한 뒤 계정 정보를 암호화해 보호된 저장소에 보관합니다. 이후 자동 로그인에 사용하며, 연결 후 저장된 계정을 삭제할 수 있습니다.</p>
         </section>
 
         <section id="apply-section" hidden>

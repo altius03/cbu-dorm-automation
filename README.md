@@ -16,6 +16,7 @@
 - 저장 후 학교 포털 재조회로 처리 결과 확인
 - 브라우저를 닫아도 이어지는 작업과 최근 결과 조회
 - 진행 중인 일괄 작업 중단 및 저장된 계정 재연결
+- 휴대폰 브라우저에 맞춘 반응형 화면
 
 ## 처리 흐름
 
@@ -53,10 +54,9 @@ npm run service
 ### 검증
 
 ```sh
-npm run test:service
 npm ci --prefix cloud --ignore-scripts
-npm --prefix cloud test
-npm --prefix cloud run build
+npm test
+npm run build
 ```
 
 클라우드 저장소 테스트는 별도의 테스트 PostgreSQL 주소가 있을 때만 실행됩니다. 실제 계정을

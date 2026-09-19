@@ -1,5 +1,5 @@
 {
-  "name": "tuk-overnight-cloud",
+  "name": "cbu-dorm-automation-cloud",
   "private": true,
   "type": "module",
   "engines": { "node": "24.x" },

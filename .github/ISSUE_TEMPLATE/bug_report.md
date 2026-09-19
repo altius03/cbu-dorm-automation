@@ -1,38 +1,27 @@
 ---
-name: Bug report
-about: Create a report to help us improve
-title: ''
+name: 오류 제보
+about: 서비스에서 발생한 문제를 알려 주세요
+title: '[오류] '
 labels: ''
 assignees: ''
-
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+## 문제
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+무슨 문제가 발생했는지 적어 주세요. 학번과 비밀번호는 절대 첨부하지 마세요.
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+## 재현 방법
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+1.
+2.
+3.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+## 기대한 결과
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+## 사용 환경
 
-**Additional context**
-Add any other context about the problem here.
+- 접속 방식: Vercel / 로컬 / Chrome 확장
+- 기기 및 운영체제:
+- 브라우저 및 버전:
+
+오류 화면을 첨부할 때 개인정보가 보이지 않는지 확인해 주세요.
