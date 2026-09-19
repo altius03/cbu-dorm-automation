@@ -101,7 +101,6 @@ try {
   assert.match(html.body, /오늘 포함 7일/);
   assert.doesNotMatch(html.body, /저장된 계정 다시 연결|계정 연결/);
   assert.equal((await call("/app.js")).status, 200);
-  assert.equal((await call("/history.mjs")).status, 200);
   assert.equal((await call("/api/health", { headers: { Host: "evil.example" } })).status, 403);
 
   const monthDates = Array.from({ length: 31 }, (_, index) =>

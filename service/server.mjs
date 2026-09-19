@@ -11,7 +11,7 @@ import { HttpError } from "./errors.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const sessionCookieName = "overnight_session";
 const knownRoutes = new Set([
-  "/", "/app.js", "/history.mjs", "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect", "/api/claim",
+  "/", "/app.js", "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect", "/api/claim",
   "/api/logout", "/api/account", "/api/applications", "/api/check", "/api/apply", "/api/batch/job",
   "/api/batch/history", "/api/batch/preview", "/api/batch/apply", "/api/batch/cancel", "/api/batch/reconcile",
   "/api/cron/holidays",
@@ -84,7 +84,6 @@ export function createApplication({
   localPort,
   page = readFileSync(join(here, "public", "index.html")),
   script = readFileSync(join(here, "public", "app.js")),
-  historyScript = readFileSync(join(here, "public", "history.mjs")),
 }) {
   if (setupToken && setupToken.length < 32) throw new Error("계정 연결 토큰은 32자 이상이어야 합니다.");
   if (cronSecret && cronSecret.length < 32) throw new Error("CRON_SECRET은 32자 이상이어야 합니다.");
@@ -234,8 +233,8 @@ export function createApplication({
     const holidayCron = request.method === "GET" && url.pathname === "/api/cron/holidays";
     const origin = holidayCron ? "" : guard(request);
     if (stopping && request.method !== "GET") throw new HttpError(503, "서버가 재시작 중입니다. 잠시 후 다시 시도해 주세요.");
-    if (request.method === "GET" && ["/", "/app.js", "/history.mjs"].includes(url.pathname)) {
-      const body = url.pathname === "/" ? page : url.pathname === "/app.js" ? script : historyScript;
+    if (request.method === "GET" && ["/", "/app.js"].includes(url.pathname)) {
+      const body = url.pathname === "/" ? page : script;
       response.writeHead(200, { "Content-Type": url.pathname === "/" ? "text/html; charset=utf-8" : "text/javascript; charset=utf-8", "Content-Length": body.length });
       response.end(body);
       return;

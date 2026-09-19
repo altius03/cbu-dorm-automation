@@ -1,12 +1,9 @@
-import { historyDate, historyTime, summarizeJob } from "/history.mjs";
-
 const loginSection = document.querySelector("#login-section");
 const appSection = document.querySelector("#app-section");
 const loginForm = document.querySelector("#login-form");
 const requestForm = document.querySelector("#request-form");
 const loginStatus = document.querySelector("#login-status");
 const status = document.querySelector("#status");
-const calendarPanel = document.querySelector(".calendar-panel");
 const calendarGrid = document.querySelector("#calendar-grid");
 const monthTitle = document.querySelector("#month-title");
 const prevMonthButton = document.querySelector("#prev-month");
@@ -23,8 +20,6 @@ const cancelButton = document.querySelector("#cancel-job");
 const refreshButton = document.querySelector("#refresh-data");
 const reconcileButton = document.querySelector("#reconcile-job");
 const holidayMeta = document.querySelector("#holiday-meta");
-const historyList = document.querySelector("#history-list");
-const historyEmpty = document.querySelector("#history-empty");
 const logoutButton = document.querySelector("#logout");
 const deleteButton = document.querySelector("#delete-account");
 
@@ -303,57 +298,6 @@ function countStatuses(job) {
   return counts;
 }
 
-function renderHistory() {
-  historyList.replaceChildren();
-  historyEmpty.hidden = state.jobs.length > 0;
-  for (const job of state.jobs) {
-    const counts = countStatuses(job);
-    const summary = summarizeJob(job, counts);
-    const button = document.createElement("button");
-    const top = document.createElement("span");
-    const title = document.createElement("strong");
-    const badge = document.createElement("span");
-    const meta = document.createElement("small");
-    const countsLine = document.createElement("span");
-    const action = document.createElement("span");
-    button.type = "button";
-    button.className = `history-item history-${summary.tone}`;
-    button.dataset.id = job.id;
-    button.setAttribute("aria-pressed", String(state.activeJob?.id === job.id));
-    title.textContent = historyDate(summary.first, summary.last);
-    badge.className = "history-badge";
-    badge.textContent = summary.label;
-    top.className = "history-top";
-    top.append(title, badge);
-    const time = historyTime(job.updatedAt);
-    meta.className = "history-meta";
-    meta.textContent = `${summary.days}일 · ${job.results?.length || 0}개 묶음${time ? ` · ${time}` : ""}`;
-    const parts = [];
-    if (counts.saved) parts.push(`신청 완료 ${counts.saved}`);
-    if (counts.exists + counts.overlap) parts.push(`기존 신청 제외 ${counts.exists + counts.overlap}`);
-    if (counts.unknown) parts.push(`확인 필요 ${counts.unknown}`);
-    if (counts.not_attempted) parts.push(`미처리 ${counts.not_attempted}`);
-    countsLine.className = "history-counts";
-    countsLine.textContent = parts.join(" · ") || summary.label;
-    action.className = "history-action";
-    action.textContent = state.activeJob?.id === job.id ? "달력에 표시 중" : "달력 보기";
-    button.setAttribute("aria-label", `${title.textContent}, ${summary.label}, ${meta.textContent}, ${action.textContent}`);
-    button.append(top, meta, countsLine, action);
-    button.addEventListener("click", () => {
-      state.activeJob = job;
-      const date = summary.first;
-      if (date) {
-        const value = dateAt(date);
-        state.viewYear = value.getUTCFullYear();
-        state.viewMonth = value.getUTCMonth();
-      }
-      showJob(job, false);
-      calendarPanel.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-    historyList.append(button);
-  }
-}
-
 function showJob(job, remember = true) {
   const jobRunning = job.status === "running";
   if (remember) {
@@ -372,7 +316,6 @@ function showJob(job, remember = true) {
     ? `${cancelRequested ? "중단 요청됨" : "신청 처리 중"} · ${completed}/${total}개 기간 확인`
     : `${job.message || "처리가 끝났습니다."} · ${counts.saved}개 기간 완료, ${counts.exists + counts.overlap}개 제외${counts.unknown ? `, ${counts.unknown}개 확인 필요` : ""}`;
   show(message, jobRunning ? "" : needsCheck ? "error" : "success");
-  renderHistory();
   updateControls();
 }
 
@@ -380,7 +323,7 @@ async function loadHistory() {
   const { jobs } = await api("/api/batch/history");
   state.jobs = jobs || [];
   if (state.activeJob) state.activeJob = state.jobs.find(job => job.id === state.activeJob.id) || state.activeJob;
-  renderHistory();
+  else state.activeJob = state.jobs.find(job => countStatuses(job).unknown > 0) || null;
 }
 
 async function loadApplications() {
@@ -406,7 +349,7 @@ async function refreshJob(id = requestedJobId) {
       batchRunning = false;
       unresolvedJob = false;
       rememberJob(undefined);
-      if (id) show("접수된 작업을 찾지 못했습니다. 최근 결과를 확인해 주세요.", "error");
+      if (id) show("접수된 작업을 찾지 못했습니다. 새로고침 후 다시 확인해 주세요.", "error");
       return;
     }
     showJob(job);
@@ -451,7 +394,7 @@ async function loadDashboard(initial = {}) {
   const tasks = [];
   if (Array.isArray(initial.jobs)) {
     state.jobs = initial.jobs;
-    renderHistory();
+    state.activeJob = state.jobs.find(job => countStatuses(job).unknown > 0) || null;
   } else tasks.push(loadHistory());
   if (Array.isArray(initial.applications)) {
     state.applications = initial.applications;
@@ -532,7 +475,7 @@ refreshButton.addEventListener("click", async () => {
   try {
     await Promise.all([loadHistory(), loadApplications()]);
     if (requestedJobId) await refreshJob(requestedJobId);
-    else show("학교 신청내역과 최근 결과를 새로 불러왔습니다.", "success");
+    else show("학교 신청내역을 새로 불러왔습니다.", "success");
   } catch (error) { show(error.message, "error"); }
   finally { setBusy(false); }
 });
