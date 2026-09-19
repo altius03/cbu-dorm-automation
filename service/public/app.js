@@ -128,7 +128,7 @@ function setConnected(connected) {
 }
 
 function credentialBody(value = {}) {
-  if (!activeCredentials) throw new Error("학교 포털에 다시 로그인해 주세요.");
+  if (!activeCredentials) throw new Error("학교 포탈에 다시 로그인해 주세요.");
   return { ...value, ...activeCredentials };
 }
 
@@ -433,7 +433,7 @@ loginForm.addEventListener("submit", async event => {
   const form = new FormData(loginForm);
   const credentials = { studentId: form.get("studentId"), password: form.get("password") };
   setBusy(true);
-  showLogin("학교 포털 로그인을 확인하고 있습니다…");
+  showLogin("학교 포탈 로그인을 확인하고 있습니다…");
   try {
     const session = await api("/api/login", {
       method: "POST",

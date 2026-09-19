@@ -148,7 +148,7 @@ export function parseResponse(text) {
     } else invalid();
   }
   if (!/^-?\d+$/.test(parameters.ErrorCode?.trim() || "")) throw new PortalError("학교 서버의 처리 결과를 확인할 수 없습니다.");
-  if (Number(parameters.ErrorCode) !== 0) throw new PortalError("학교 서버가 요청을 거절했습니다. 포털에서 신청 조건을 확인해 주세요.");
+  if (Number(parameters.ErrorCode) !== 0) throw new PortalError("학교 서버가 요청을 거절했습니다. 포탈에서 신청 조건을 확인해 주세요.");
   return { parameters, datasets };
 }
 
@@ -263,7 +263,7 @@ function bufferedHttpsRequest(url, { method, body, headers, timeoutMs }, request
     const request = requestImpl(target, {
       method,
       headers: requestHeaders,
-      // 학교 포털이 일부 응답 헤더 끝에 비표준 공백을 붙여 Node fetch가 거부한다.
+      // 학교 포탈이 일부 응답 헤더 끝에 비표준 공백을 붙여 Node fetch가 거부한다.
       insecureHTTPParser: true,
     }, response => {
       const chunks = [];
@@ -456,14 +456,14 @@ export class TukoreaPortal {
       const loginResult = await loginResponse.text();
       if (!loginResponse.ok) throw new PortalError("학교 로그인 서버가 요청을 처리하지 못했습니다.");
       if (/인증에 실패했습니다/.test(loginResult)) {
-        throw new PortalError("학교 SSO가 전송된 로그인 정보를 거절했습니다. 포털 로그인 화면에서 사용하는 아이디인지 확인해 주세요.");
+        throw new PortalError("학교 SSO가 전송된 로그인 정보를 거절했습니다. 포탈 로그인 화면에서 사용하는 아이디인지 확인해 주세요.");
       }
       await this.http.request(`${DREAM}/com/SsoCtr/initPageWork.do?loginGbn=sso`, {
         headers: { Referer: "https://portal.tukorea.ac.kr/" },
       });
       const login = await this.transaction("/com/SsoCtr/isLogin.do");
       if (login.datasets.DS_LOGINCONFIRM?.[0]?.isLogin !== "1") {
-        throw new PortalError("학교 포털 로그인에 실패했습니다. 학번과 비밀번호를 확인해 주세요.");
+        throw new PortalError("학교 포탈 로그인에 실패했습니다. 학번과 비밀번호를 확인해 주세요.");
       }
       this.session = login.datasets.DS_SESSIONINFO?.[0] || {};
       this.authenticated = true;
@@ -643,9 +643,9 @@ export class TukoreaPortal {
     }
     let rows;
     try { rows = await context.list(); }
-    catch { throw new PortalError("신청 결과를 확인할 수 없습니다. 학교 포털의 신청 내역을 확인해 주세요."); }
+    catch { throw new PortalError("신청 결과를 확인할 수 없습니다. 학교 포탈의 신청 내역을 확인해 주세요."); }
     if (!rows.some(row => row.outStayStGbn !== "3" && row.outStayFrDt === start && row.outStayToDt === end)) {
-      throw new PortalError("재조회에서 신청을 확인하지 못했습니다. 학교 포털의 신청 내역을 확인해 주세요.");
+      throw new PortalError("재조회에서 신청을 확인하지 못했습니다. 학교 포탈의 신청 내역을 확인해 주세요.");
     }
     return { count, rows };
   }

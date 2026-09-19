@@ -45,7 +45,7 @@ async function run(mode) {
         end: period.end.compact,
       }],
     });
-    if (!result?.ok) throw new Error(result?.message || "포털 요청에 실패했습니다.");
+    if (!result?.ok) throw new Error(result?.message || "포탈 요청에 실패했습니다.");
     show(result.message, "success");
   } catch (error) {
     show(error.message || String(error), "error");

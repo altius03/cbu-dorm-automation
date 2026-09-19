@@ -120,7 +120,7 @@ export function createApplication({
   };
   const requireProfile = async request => {
     const profile = await profileFrom(request);
-    if (!profile) throw new HttpError(401, "학교 포털에 먼저 로그인해 주세요.");
+    if (!profile) throw new HttpError(401, "학교 포탈에 먼저 로그인해 주세요.");
     return profile;
   };
   function credentialsFrom(body) {
@@ -135,7 +135,7 @@ export function createApplication({
     const expected = Buffer.from(profile.accountKey || []);
     const supplied = Buffer.from(store.accountKey(credentials));
     if (!expected.length || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
-      throw new HttpError(403, "이 서비스 계정의 학교 포털 아이디로 다시 로그인해 주세요.");
+      throw new HttpError(403, "이 서비스 계정의 학교 포탈 아이디로 다시 로그인해 주세요.");
     }
     return credentials;
   }

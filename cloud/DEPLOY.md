@@ -2,9 +2,9 @@
 
 ## 구성
 
-- Vercel Node.js 24: 웹 화면, 학교 포털 로그인·조회·신청 API
+- Vercel Node.js 24: 웹 화면, 학교 포탈 로그인·조회·신청 API
 - Supabase PostgreSQL: 계정 HMAC, HttpOnly 세션 해시, 신청 결과, 실행 잠금과 요청 제한
-- 학교 포털 아이디·비밀번호: DB·로그·쿠키·브라우저 저장소에 저장하지 않고 현재 페이지의 메모리와
+- 학교 포탈 아이디·비밀번호: DB·로그·쿠키·브라우저 저장소에 저장하지 않고 현재 페이지의 메모리와
   현재 API 요청에서만 사용
 
 `overnight_private` 스키마는 Data API에 노출하지 않습니다. `anon`과 `authenticated` 권한을

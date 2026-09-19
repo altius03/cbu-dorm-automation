@@ -47,5 +47,5 @@ node service/backup.mjs /absolute/path/to/new-backup-directory
 npm run test:service
 ```
 
-자동 테스트는 임시 DB와 가짜 학교 포털만 사용합니다. 기존 암호문 컬럼 제거, 비밀번호 미저장,
+자동 테스트는 임시 DB와 가짜 학교 포탈만 사용합니다. 기존 암호문 컬럼 제거, 비밀번호 미저장,
 로그인·달력·일괄신청·확인 필요 결과 복구, 실제 로컬 HTTP 보안 헤더와 모바일 UI를 검증합니다.
