@@ -1,6 +1,7 @@
 import { isIP } from "node:net";
 import html from "../service/public/index.html" with { type: "text" };
 import script from "../service/public/app.js" with { type: "text" };
+import historyScript from "../service/public/history.mjs" with { type: "text" };
 import { createApplication } from "../service/server.mjs";
 import { syncPublicHolidays } from "./holidays.mjs";
 import { getStore } from "./runtime.mjs";
@@ -22,6 +23,7 @@ export default async function handler(request, response) {
         holidaySync: () => syncPublicHolidays(store, { serviceKey: process.env.DATA_GO_KR_SERVICE_KEY || "" }),
         page: Buffer.from(html),
         script: Buffer.from(script),
+        historyScript: Buffer.from(historyScript),
         clientAddress: req => {
           const value = process.env.VERCEL ? req.headers["x-vercel-forwarded-for"] : req.socket.remoteAddress;
           return typeof value === "string" && isIP(value) ? value : "unknown";

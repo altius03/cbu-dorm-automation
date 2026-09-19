@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { historyDate, summarizeJob } from "./public/history.mjs";
 
 const htmlUrl = new URL("./public/index.html", import.meta.url);
 const scriptUrl = new URL("./public/app.js", import.meta.url);
@@ -23,6 +24,8 @@ for (const endpoint of ["/api/login", "/api/applications", "/api/batch/history",
   assert.ok(script.includes(endpoint), `${endpoint} UI flow missing`);
 }
 assert.match(script, /state\.activeJob = job;[\s\S]*renderCalendar/);
+assert.match(script, /historyDate\(summary\.first, summary\.last\)[\s\S]*달력에서 보기/);
+assert.match(script, /scrollIntoView\(\{ behavior: "smooth", block: "start" \}\)/);
 assert.match(script, /status-saved|`status-\$\{mark\}`/);
 assert.match(script, /const body = \{ dates \}/);
 assert.match(script, /pattern === "weekends"[\s\S]*day === 5/);
@@ -30,6 +33,16 @@ assert.match(script, /pattern === "weekdays"[\s\S]*!holidayFor\(value\)/);
 assert.match(script, /addDays\(state\.today, state\.maxSelectionDays - 1\)/);
 assert.match(script, /preview\.periods\.length/);
 assert.doesNotMatch(script, /innerHTML|eval\(/);
+
+const counts = { saved: 1, exists: 0, overlap: 1, unknown: 0, not_attempted: 0 };
+assert.deepEqual(summarizeJob({
+  status: "done", outcome: "batch",
+  results: [{ date: "20260920", end: "20260927" }, { date: "20260929", end: "20260929" }],
+}, counts), {
+  first: "2026-09-20", last: "2026-09-29", days: 9, label: "신청 완료", tone: "success",
+});
+assert.equal(summarizeJob({ status: "interrupted", results: [] }, { ...counts, saved: 0, unknown: 1 }).label, "확인 필요");
+assert.equal(historyDate("2026-12-31", "2027-01-02"), "2026년 12월 31일 ~ 2027년 1월 2일");
 
 const syntax = spawnSync(process.execPath, ["--check", fileURLToPath(scriptUrl)], { encoding: "utf8" });
 assert.equal(syntax.status, 0, syntax.stderr);

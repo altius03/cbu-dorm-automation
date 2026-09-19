@@ -1,9 +1,12 @@
+import { historyDate, historyTime, summarizeJob } from "/history.mjs";
+
 const loginSection = document.querySelector("#login-section");
 const appSection = document.querySelector("#app-section");
 const loginForm = document.querySelector("#login-form");
 const requestForm = document.querySelector("#request-form");
 const loginStatus = document.querySelector("#login-status");
 const status = document.querySelector("#status");
+const calendarPanel = document.querySelector(".calendar-panel");
 const calendarGrid = document.querySelector("#calendar-grid");
 const monthTitle = document.querySelector("#month-title");
 const prevMonthButton = document.querySelector("#prev-month");
@@ -305,28 +308,47 @@ function renderHistory() {
   historyEmpty.hidden = state.jobs.length > 0;
   for (const job of state.jobs) {
     const counts = countStatuses(job);
-    const first = compactToIso(job.results?.[0]?.date || "");
+    const summary = summarizeJob(job, counts);
     const button = document.createElement("button");
+    const top = document.createElement("span");
     const title = document.createElement("strong");
-    const summary = document.createElement("small");
+    const badge = document.createElement("span");
+    const meta = document.createElement("small");
+    const countsLine = document.createElement("span");
+    const action = document.createElement("span");
     button.type = "button";
-    button.className = "history-item";
+    button.className = `history-item history-${summary.tone}`;
     button.dataset.id = job.id;
     button.setAttribute("aria-pressed", String(state.activeJob?.id === job.id));
-    title.textContent = `${first || "날짜 없음"} · ${job.results?.length || 0}개 기간`;
-    summary.textContent = job.status === "running"
-      ? "처리 중"
-      : `${counts.saved} 완료 · ${counts.exists + counts.overlap} 제외${counts.unknown ? ` · ${counts.unknown} 확인 필요` : ""}`;
-    button.append(title, summary);
+    title.textContent = historyDate(summary.first, summary.last);
+    badge.className = "history-badge";
+    badge.textContent = summary.label;
+    top.className = "history-top";
+    top.append(title, badge);
+    const time = historyTime(job.updatedAt);
+    meta.className = "history-meta";
+    meta.textContent = `${summary.days}일 · ${job.results?.length || 0}개 묶음${time ? ` · ${time}` : ""}`;
+    const parts = [];
+    if (counts.saved) parts.push(`신청 완료 ${counts.saved}`);
+    if (counts.exists + counts.overlap) parts.push(`기존 신청 제외 ${counts.exists + counts.overlap}`);
+    if (counts.unknown) parts.push(`확인 필요 ${counts.unknown}`);
+    if (counts.not_attempted) parts.push(`미처리 ${counts.not_attempted}`);
+    countsLine.className = "history-counts";
+    countsLine.textContent = parts.join(" · ") || summary.label;
+    action.className = "history-action";
+    action.textContent = state.activeJob?.id === job.id ? "달력에 표시 중" : "달력에서 보기 →";
+    button.setAttribute("aria-label", `${title.textContent}, ${summary.label}, ${meta.textContent}, ${action.textContent}`);
+    button.append(top, meta, countsLine, action);
     button.addEventListener("click", () => {
       state.activeJob = job;
-      const date = compactToIso(job.results?.[0]?.date || "");
+      const date = summary.first;
       if (date) {
         const value = dateAt(date);
         state.viewYear = value.getUTCFullYear();
         state.viewMonth = value.getUTCMonth();
       }
       showJob(job, false);
+      calendarPanel.scrollIntoView({ behavior: "smooth", block: "start" });
     });
     historyList.append(button);
   }
