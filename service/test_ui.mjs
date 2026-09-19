@@ -13,6 +13,7 @@ assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*a
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /오늘 포함 7일[\s\S]*오늘 포함 14일[\s\S]*한 달 단위 최대 기간/);
 assert.match(html, /매일[\s\S]*평일 전체[\s\S]*주말 전체[\s\S]*지정 요일/);
+assert.match(html, /<legend>어떤 날을<\/legend>[\s\S]*<legend>기간<\/legend>/);
 assert.match(html, /id="mode-auto"[^>]*checked/);
 assert.doesNotMatch(html, /id="mode-manual"[^>]*checked/);
 assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: fixed/);
