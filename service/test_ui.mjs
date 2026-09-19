@@ -18,7 +18,7 @@ assert.match(html, /<header class="app-header">[\s\S]*class="club-mark"[\s\S]*�
 assert.doesNotMatch(html, /brand-mark|<span class="brand-mark">T<\/span>/);
 assert.equal(mascot.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
 assert.match(html, /<strong>외박신청<\/strong><small>by cbu<\/small>/);
-assert.match(html, /.login-brand strong \{ font-size: 20px; \}/);
+assert.match(html, /.login-brand strong \{ font-size: 32px; font-weight: 800; letter-spacing: -\.04em; \}/);
 assert.match(html, /<label for="student-id">포털 아이디<\/label>/);
 assert.match(html, /class="club-link" href="https:\/\/www\.instagram\.com\/tukorea_cbu\/"[\s\S]*한국공학대 개발동아리 CBU[\s\S]*class="external-arrow"[\s\S]*↗/);
 assert.doesNotMatch(html, /\.club-link \{[^}]*background:/);
