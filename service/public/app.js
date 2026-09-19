@@ -150,7 +150,7 @@ function activeDates() {
   return datesBetween(state.today, addDays(state.today, days - 1)).filter(value => {
     const day = dateAt(value).getUTCDay();
     if (pattern === "daily") return true;
-    if (pattern === "weekdays") return day >= 1 && day <= 5 && !holidayFor(value);
+    if (pattern === "weekdays") return day >= 1 && day <= 5;
     if (pattern === "weekends") return day === 0 || day === 5 || day === 6;
     return pattern === "custom" && weekdays.has(day);
   }).filter(date => !hasApplication(date));

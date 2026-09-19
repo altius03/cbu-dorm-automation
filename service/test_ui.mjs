@@ -25,7 +25,8 @@ assert.match(html, /\.control-panel \{ order: 1; \}[\s\S]*\.calendar-panel \{ or
 assert.match(html, /학교 신청내역[\s\S]*data-result="saved" hidden[\s\S]*data-result="unknown" hidden[\s\S]*data-result="exists overlap not_attempted" hidden/);
 assert.match(html, /#login-status\[data-kind="error"\]/);
 assert.match(html, /id="reconcile-job"[\s\S]*자동 선택[\s\S]*달력 직접 선택/);
-assert.match(html, /id="holiday-meta"[\s\S]*공휴일을 제외한/);
+assert.match(html, /id="holiday-meta"/);
+assert.doesNotMatch(html, /공휴일을 제외한 월요일부터 금요일까지/);
 assert.doesNotMatch(html, /최근 신청 결과|history-list|history-item/);
 assert.doesNotMatch(html, /저장된 계정 다시 연결|계정 연결|학기 퇴관|6개월 퇴관|12개월 퇴관|schedule-meta/);
 
@@ -37,7 +38,8 @@ assert.doesNotMatch(script, /renderHistory|historyDate|historyTime|summarizeJob/
 assert.match(script, /status-saved|`status-\$\{mark\}`/);
 assert.match(script, /const body = \{ dates \}/);
 assert.match(script, /pattern === "weekends"[\s\S]*day === 5/);
-assert.match(script, /pattern === "weekdays"[\s\S]*!holidayFor\(value\)/);
+assert.match(script, /pattern === "weekdays"[\s\S]*return day >= 1 && day <= 5/);
+assert.doesNotMatch(script, /pattern === "weekdays"[^\n]*holidayFor/);
 assert.match(script, /addDays\(state\.today, state\.maxSelectionDays - 1\)/);
 assert.match(script, /preview\.periods\.length/);
 assert.match(script, /function moveMonth\(offset\)[\s\S]*if \(month < state\.today\.slice\(0, 7\)\) return/);
