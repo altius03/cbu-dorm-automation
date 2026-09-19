@@ -15,6 +15,7 @@ const autoMode = document.querySelector("#mode-auto");
 const manualControls = document.querySelector("#manual-controls");
 const autoControls = document.querySelector("#auto-controls");
 const customWeekdays = document.querySelector("#custom-weekdays");
+const patternHelp = document.querySelector("#pattern-help");
 const selectionSummary = document.querySelector("#selection-summary");
 const submitButton = document.querySelector("#submit-selection");
 const cancelButton = document.querySelector("#cancel-job");
@@ -243,6 +244,7 @@ function updateSelection() {
   manualControls.hidden = !manualMode.checked;
   autoControls.hidden = manualMode.checked;
   customWeekdays.hidden = checkedValue("pattern") !== "custom";
+  patternHelp.textContent = document.querySelector('input[name="pattern"]:checked')?.dataset.help || "";
   const dates = activeDates();
   selectionSummary.textContent = dates.length
     ? `${formatDate(dates[0])}부터 ${formatDate(dates.at(-1))}까지 · ${dates.length}일 선택`

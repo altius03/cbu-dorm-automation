@@ -12,8 +12,10 @@ assert.match(html, /<meta name="viewport" content="width=device-width, initial-s
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /오늘 포함 7일[\s\S]*오늘 포함 14일[\s\S]*한 달 단위 최대 기간/);
-assert.match(html, /매일[\s\S]*평일 전체[\s\S]*주말 전체[\s\S]*지정 요일/);
+assert.match(html, /<strong>매일<\/strong>[\s\S]*<strong>평일<\/strong>[\s\S]*<strong>주말<\/strong>[\s\S]*<strong>요일 지정<\/strong>/);
 assert.match(html, /<legend>어떤 날을<\/legend>[\s\S]*<legend>기간<\/legend>/);
+assert.match(html, /\.pattern-options \{ grid-template-columns: repeat\(2,[\s\S]*\.range-options \{ grid-template-columns: repeat\(3,/);
+assert.match(html, /id="pattern-help"[\s\S]*금요일부터 일요일까지 선택합니다/);
 assert.match(html, /id="mode-auto"[^>]*checked/);
 assert.doesNotMatch(html, /id="mode-manual"[^>]*checked/);
 assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: fixed/);
@@ -41,6 +43,7 @@ assert.match(script, /prevMonthButton\.disabled = viewMonth === state\.today\.sl
 assert.match(script, /nextMonthButton\.disabled = viewMonth === maxSelectableDate\(\)\.slice\(0, 7\)/);
 assert.match(script, /if \(!loadError\) show\(""\)/);
 assert.match(script, /showLogin\(error\.message, "error"\)/);
+assert.match(script, /patternHelp\.textContent = document\.querySelector\('input\[name="pattern"\]:checked'\)\?\.dataset\.help/);
 assert.doesNotMatch(script, /innerHTML|eval\(/);
 
 const syntax = spawnSync(process.execPath, ["--check", fileURLToPath(scriptUrl)], { encoding: "utf8" });

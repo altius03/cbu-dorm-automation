@@ -108,9 +108,11 @@
       .choice-list { display: grid; gap: 8px; }
       .choice { position: relative; display: flex; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
       .choice:has(input:checked) { border-color: #7891f8; background: #f4f6ff; }
+      .choice:has(input:focus-visible) { outline: 3px solid rgba(51, 92, 255, .2); outline-offset: 2px; }
       .choice input { margin-top: 2px; accent-color: var(--blue); }
       .choice strong, .choice small { display: block; }
       .choice small { margin-top: 3px; color: var(--muted); }
+      .option-help { margin: 10px 2px 0; font-size: 13px; }
       .options-section + .options-section { margin-top: 20px; }
       #custom-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
       #custom-weekdays label { position: relative; }
@@ -128,6 +130,14 @@
         .panel { padding: 18px 14px; border-radius: 16px; }
         .control-panel { order: 1; }
         .calendar-panel { order: 2; }
+        .pattern-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pattern-options .choice, .range-options .choice { min-height: 44px; align-items: center; justify-content: center; gap: 0; padding: 0 8px; text-align: center; }
+        .pattern-options .choice input, .range-options .choice input { position: absolute; opacity: 0; }
+        .pattern-options .choice small, .range-options .choice small { display: none; }
+        .range-options { grid-template-columns: repeat(3, 1fr); gap: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; }
+        .range-options .choice { border: 0; border-right: 1px solid var(--line); border-radius: 0; }
+        .range-options .choice:last-child { border-right: 0; }
+        .range-options .choice:has(input:checked) { color: white; background: var(--blue); }
         .day { min-height: 42px; border-radius: 10px; }
         .submit-bar { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; padding: 10px 14px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: rgba(255, 255, 255, .96); backdrop-filter: blur(12px); }
         #submit-selection { max-width: 520px; margin: 0 auto; display: block; }
@@ -226,12 +236,13 @@
               <section id="auto-controls">
                 <fieldset class="options-section">
                   <legend>어떤 날을</legend>
-                  <div class="choice-list">
-                    <label class="choice"><input type="radio" name="pattern" value="daily" /><span><strong>매일</strong><small>최대 7박 8일씩 묶어서</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekdays" /><span><strong>평일 전체</strong><small>공휴일을 제외한 월요일부터 금요일까지</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekends" checked /><span><strong>주말 전체</strong><small>금요일부터 일요일까지 묶어서</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="custom" /><span><strong>지정 요일</strong><small>원하는 요일만 반복</small></span></label>
+                  <div class="choice-list pattern-options">
+                    <label class="choice"><input type="radio" name="pattern" value="daily" data-help="신청 가능한 날짜를 매일 선택합니다." /><span><strong>매일</strong><small>최대 7박 8일씩 묶어서</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekdays" data-help="공휴일을 제외한 월요일부터 금요일까지 선택합니다." /><span><strong>평일</strong><small>공휴일을 제외한 월요일부터 금요일까지</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="weekends" data-help="금요일부터 일요일까지 선택합니다." checked /><span><strong>주말</strong><small>금요일부터 일요일까지 묶어서</small></span></label>
+                    <label class="choice"><input type="radio" name="pattern" value="custom" data-help="선택한 요일을 반복합니다." /><span><strong>요일 지정</strong><small>원하는 요일만 반복</small></span></label>
                   </div>
+                  <p id="pattern-help" class="option-help" aria-live="polite">금요일부터 일요일까지 선택합니다.</p>
                   <div id="custom-weekdays" hidden>
                     <label><input type="checkbox" name="weekday" value="0" /><span>일</span></label>
                     <label><input type="checkbox" name="weekday" value="1" /><span>월</span></label>
@@ -245,7 +256,7 @@
 
                 <fieldset class="options-section">
                   <legend>기간</legend>
-                  <div id="horizon-options" class="choice-list">
+                  <div id="horizon-options" class="choice-list range-options">
                     <label class="choice"><input type="radio" name="range" value="7" /><span><strong>1주</strong><small>오늘 포함 7일</small></span></label>
                     <label class="choice"><input type="radio" name="range" value="14" /><span><strong>2주</strong><small>오늘 포함 14일</small></span></label>
                     <label class="choice"><input type="radio" name="range" value="31" checked /><span><strong>31일</strong><small>한 달 단위 최대 기간</small></span></label>
