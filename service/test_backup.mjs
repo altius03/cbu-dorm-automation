@@ -34,7 +34,7 @@ try {
   assert.equal(JSON.parse(readFileSync(join(localBackup, "manifest.json"), "utf8")).requiresExternalKey, false);
   restored = new CredentialStore(localBackup);
   assert.deepEqual(restored.database.prepare("SELECT * FROM profiles WHERE id = ?").get(owner.id), originalProfile);
-  assert.equal(restored.find(owner.token).credentials.password, "fixture-backup-password");
+  assert.equal("credentials" in restored.find(owner.token), false);
   assert.equal(restored.job(owner.id, "fixture-job").results[0].status, "saved");
   restored.close();
   restored = null;
@@ -52,7 +52,7 @@ try {
   delete process.env.OVERNIGHT_MASTER_KEY;
   unlinkSync(join(source, "master.key"));
   const missingBackup = join(directory, "missing-key");
-  await assert.rejects(backupData(source, missingBackup), /암호화 키/);
+  await assert.rejects(backupData(source, missingBackup), /서버 키/);
   assert.equal(existsSync(missingBackup), false);
 
   // 운영 환경변수 키는 백업 파일이나 manifest에 기록하지 않는다.
@@ -63,7 +63,7 @@ try {
   assert.equal(JSON.parse(readFileSync(join(externalBackup, "manifest.json"), "utf8")).requiresExternalKey, true);
   for (const file of readdirSync(externalBackup)) assert.equal(readFileSync(join(externalBackup, file)).includes(key), false);
   restored = new CredentialStore(externalBackup);
-  assert.equal(restored.find(owner.token).credentials.password, "fixture-backup-password");
+  assert.equal("credentials" in restored.find(owner.token), false);
   restored.close();
   restored = null;
   assert.deepEqual(store.database.prepare("SELECT * FROM profiles WHERE id = ?").get(owner.id), originalProfile);

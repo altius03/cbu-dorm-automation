@@ -1,11 +1,8 @@
 import { isIP } from "node:net";
-import { start } from "workflow/api";
 import html from "../service/public/index.html" with { type: "text" };
 import script from "../service/public/app.js" with { type: "text" };
 import { createApplication } from "../service/server.mjs";
 import { getStore } from "./runtime.mjs";
-import { dispatchJob } from "./dispatch.mjs";
-import { applyOvernight } from "./workflows/overnight.mjs";
 
 let app;
 export default async function handler(request, response) {
@@ -26,7 +23,6 @@ export default async function handler(request, response) {
           const value = process.env.VERCEL ? req.headers["x-vercel-forwarded-for"] : req.socket.remoteAddress;
           return typeof value === "string" && isIP(value) ? value : "unknown";
         },
-        enqueue: id => dispatchJob(store, id, jobId => start(applyOvernight, [jobId])),
       });
     }
     await app.handler(request, response);

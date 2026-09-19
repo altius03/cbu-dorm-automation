@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createDecipheriv, randomUUID } from "node:crypto";
+import { createDecipheriv } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -31,16 +31,11 @@ const directory = mkdtempSync(join(tmpdir(), "tuk-overnight-test-"));
 try {
   const store = new CredentialStore(directory);
   const created = store.create({ studentId: "2026000000", password: "not-a-real-password" });
-  assert.deepEqual(store.find(created.token).credentials, {
-    studentId: "2026000000",
-    password: "not-a-real-password",
-  });
+  assert.ok(store.find(created.token).accountKey);
+  assert.equal("credentials" in store.find(created.token), false);
   const claimed = store.claim(created.token);
   assert.equal(store.find(created.token), null);
-  assert.deepEqual(store.find(claimed.token).credentials, {
-    studentId: "2026000000",
-    password: "not-a-real-password",
-  });
+  assert.ok(store.find(claimed.token).accountKey);
   assert.equal(store.find("wrong-token"), null);
   assert.equal(store.delete(created.id), true);
   store.close();
@@ -113,8 +108,10 @@ try {
   await assert.rejects(portal.applyMany(["20990101", "20990101"]), /겹치는/);
 
   const httpStore = new CredentialStore(join(directory, "http"));
-  const owner = httpStore.create({ studentId: "owner0001", password: "fake-password" });
-  const other = httpStore.create({ studentId: "other0002", password: "fake-password" });
+  const ownerCredentials = { studentId: "owner0001", password: "fake-password" };
+  const otherCredentials = { studentId: "other0002", password: "fake-password" };
+  const owner = httpStore.create(ownerCredentials);
+  const other = httpStore.create(otherCredentials);
   const logs = [];
   let clock = new Date("2026-09-19T03:00:00Z");
   let batchCalls = 0;
@@ -155,24 +152,24 @@ try {
   const manual = await call(app, "/api/batch/preview", { token: owner.token, body: { dates: ["2026-09-21", "2026-09-20"] } });
   assert.deepEqual(manual.body.dates, ["2026-09-20", "2026-09-21"]);
   const plan = preview.body.plan;
-  assert.equal((await call(app, "/api/batch/apply", { token: other.token, body: { plan } })).statusCode, 403);
-  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan: plan + "tampered" } })).statusCode, 400);
-  const accepted = await call(app, "/api/batch/apply", { token: owner.token, body: { plan } });
-  assert.equal(accepted.statusCode, 202);
-  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan } })).body.job.id, accepted.body.job.id);
+  assert.equal((await call(app, "/api/batch/apply", { token: other.token, body: { plan, ...ownerCredentials } })).statusCode, 403);
+  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan: plan + "tampered", ...ownerCredentials } })).statusCode, 400);
+  const acceptedRequest = call(app, "/api/batch/apply", { token: owner.token, body: { plan, ...ownerCredentials } });
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal(batchCalls, 1);
   assert.equal((await call(app, "/api/account", { method: "DELETE", token: owner.token })).statusCode, 409);
-  assert.equal((await call(app, "/api/apply", { token: owner.token, body: { id: randomUUID(), start: "2026-09-20" } })).statusCode, 409);
-  assert.equal((await call(app, `/api/batch/job?id=${accepted.body.job.id}`, { method: "GET", token: other.token })).body.job, null);
   releaseBatch();
-  await app.drain();
+  const accepted = await acceptedRequest;
+  assert.equal(accepted.statusCode, 200);
+  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan, ...ownerCredentials } })).body.job.id, accepted.body.job.id);
+  assert.equal((await call(app, `/api/batch/job?id=${accepted.body.job.id}`, { method: "GET", token: other.token })).body.job, null);
   assert.equal((await call(app, "/api/batch/job", { method: "GET", token: owner.token })).body.job.status, "done");
   clock = new Date("2026-09-20T03:00:00Z");
-  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan } })).body.job.status, "done");
+  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan, ...ownerCredentials } })).body.job.status, "done");
   assert.equal(batchCalls, 1);
   const expired = await call(app, "/api/batch/preview", { token: owner.token, body: { kind: "weekends-week" } });
   clock = new Date(clock.getTime() + 600_001);
-  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan: expired.body.plan } })).statusCode, 409);
+  assert.equal((await call(app, "/api/batch/apply", { token: owner.token, body: { plan: expired.body.plan, ...ownerCredentials } })).statusCode, 409);
 
   // 일회성 연결 링크는 동시 요청과 재시작 모두에서 재사용할 수 없다.
   const setupToken = "fixture-setup-token-".repeat(3);
@@ -201,7 +198,7 @@ try {
   reopened.recoverJobs();
   assert.equal(reopened.job(owner.id, "interrupted-fixture").status, "interrupted");
   assert.equal(reopened.job(owner.id, "interrupted-fixture").results[0].status, "unknown");
-  assert.equal(reopened.find(owner.token).credentials.studentId, "owner0001");
+  assert.ok(reopened.find(owner.token).accountKey);
   assert.equal(reopened.setupUsed(setupToken), true);
   assert.equal(reopened.find(owner.token, { now: Date.now() + 31_536_000_001 }), null);
   reopened.delete(owner.id);

@@ -42,6 +42,7 @@ let checkingJob = false;
 let unresolvedJob = false;
 let cancelRequested = false;
 let requestedJobId;
+let activeCredentials;
 let pollDelay = 3000;
 const pendingKey = "overnight_pending_job";
 try { requestedJobId = sessionStorage.getItem(pendingKey) || undefined; } catch {}
@@ -109,6 +110,7 @@ function setConnected(connected) {
   loginSection.hidden = connected;
   appSection.hidden = !connected;
   if (!connected) {
+    activeCredentials = undefined;
     clearTimeout(jobTimer);
     batchRunning = false;
     unresolvedJob = false;
@@ -116,6 +118,11 @@ function setConnected(connected) {
     rememberJob(undefined);
   }
   updateControls();
+}
+
+function credentialBody(value = {}) {
+  if (!activeCredentials) throw new Error("학교 포털에 다시 로그인해 주세요.");
+  return { ...value, ...activeCredentials };
 }
 
 function setBusy(busy) {
@@ -240,10 +247,11 @@ function updateControls() {
 async function api(path, options = {}) {
   let response;
   try {
+    const { timeout = 45_000, ...requestOptions } = options;
     response = await fetch(path, {
-      ...options,
-      signal: AbortSignal.timeout(45_000),
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      ...requestOptions,
+      signal: AbortSignal.timeout(timeout),
+      headers: { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
     });
   } catch {
     throw new Error("서버 연결이 끊겼습니다. 처리 결과를 다시 확인해 주세요.");
@@ -349,7 +357,7 @@ async function loadHistory() {
 }
 
 async function loadApplications() {
-  const { applications } = await api("/api/applications");
+  const { applications } = await api("/api/applications", { method: "POST", body: JSON.stringify(credentialBody()) });
   state.applications = applications || [];
   updateSelection();
 }
@@ -393,10 +401,11 @@ async function refreshJob(id = requestedJobId) {
 
 async function submitJob(plan, id) {
   rememberJob(id);
+  batchRunning = true;
   unresolvedJob = true;
   updateControls();
   try {
-    const { job } = await api("/api/batch/apply", { method: "POST", body: JSON.stringify({ plan }) });
+    const { job } = await api("/api/batch/apply", { method: "POST", body: JSON.stringify(credentialBody({ plan })), timeout: 270_000 });
     showJob(job);
     if (batchRunning) scheduleJob(job.id);
     else await loadHistory();
@@ -448,23 +457,13 @@ loginForm.addEventListener("submit", async event => {
       headers: setupToken ? { "X-Setup-Token": setupToken } : {},
       body: JSON.stringify(credentials),
     });
+    activeCredentials = credentials;
     loginForm.reset();
     showLogin();
     configureSession(session);
     setConnected(true);
     await loadDashboard(session);
   } catch (error) {
-    try {
-      const session = await api("/api/session");
-      if (session.connected) {
-        loginForm.reset();
-        showLogin();
-        configureSession(session);
-        setConnected(true);
-        await loadDashboard();
-        return;
-      }
-    } catch {}
     showLogin(error.message);
   } finally { setBusy(false); }
 });
@@ -480,6 +479,7 @@ requestForm.addEventListener("submit", async event => {
     const preview = await api("/api/batch/preview", { method: "POST", body: JSON.stringify(body) });
     const first = preview.dates[0], last = preview.dates.at(-1);
     if (!window.confirm(`${first} ~ ${last}\n총 ${preview.dates.length}일을 ${preview.periods.length}개 기간으로 묶어 신청할까요?\n한 기간은 최대 7박 8일이며 기존 신청일은 제외됩니다.`)) return;
+    setBusy(false);
     await submitJob(preview.plan, preview.id);
   } catch (error) { show(error.message, "error"); }
   finally { setBusy(false); }
@@ -516,7 +516,7 @@ reconcileButton.addEventListener("click", async () => {
   setBusy(true);
   show("학교 신청내역을 읽어 확인 필요 결과를 대조하고 있습니다…");
   try {
-    const { job, applications } = await api("/api/batch/reconcile", { method: "POST", body: JSON.stringify({ id }) });
+    const { job, applications } = await api("/api/batch/reconcile", { method: "POST", body: JSON.stringify(credentialBody({ id })) });
     state.applications = applications || state.applications;
     state.jobs = state.jobs.map(item => item.id === job.id ? job : item);
     showJob(job);
@@ -546,7 +546,7 @@ logoutButton.addEventListener("click", async () => {
 });
 
 deleteButton.addEventListener("click", async () => {
-  if (!window.confirm("저장된 학교 로그인 정보와 이 서비스의 작업 기록을 삭제할까요? 학교에 제출된 신청은 유지됩니다.")) return;
+  if (!window.confirm("이 서비스의 계정과 작업 기록을 삭제할까요? 학교에 제출된 신청은 유지됩니다.")) return;
   setBusy(true);
   try {
     await api("/api/account", { method: "DELETE", body: "{}" });

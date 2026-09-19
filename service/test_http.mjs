@@ -13,8 +13,10 @@ import { PortalError } from "./portal.mjs";
 // Real loopback sockets, disposable credentials, and a stub portal only.
 const directory = mkdtempSync(join(tmpdir(), "overnight-http-test-"));
 const store = new CredentialStore(directory);
-const owner = store.create({ studentId: "httpowner1", password: "fixture-password" });
-const other = store.create({ studentId: "httpother2", password: "fixture-password" });
+const ownerCredentials = { studentId: "httpowner1", password: "fixture-password" };
+const otherCredentials = { studentId: "httpother2", password: "fixture-password" };
+const owner = store.create(ownerCredentials);
+const other = store.create(otherCredentials);
 const publicOrigin = "https://overnight.example";
 const setupToken = "fixture-http-setup-token-".repeat(3);
 const logs = [];
@@ -50,7 +52,7 @@ const app = createApplication({
       optionsForBatch = options;
       await options.onProgress({ message: "fixture-processing", results: periods.map(period => ({ ...period, status: "not_attempted" })) });
       await batchGate;
-      return { status: options.shouldStop?.() ? "cancelled" : "batch", message: "fixture-done", results: periods.map(period => ({ ...period, status: "not_attempted" })) };
+      return { status: await options.shouldStop?.() ? "cancelled" : "batch", message: "fixture-done", results: periods.map(period => ({ ...period, status: "not_attempted" })) };
     },
   }),
 });
@@ -126,27 +128,28 @@ try {
   assert.match(cookie, /; SameSite=Strict/);
   assert.match(cookie, /; Secure/);
   const session = await call("/api/session", { headers: { Host: "overnight.example", Origin: publicOrigin, Cookie: cookie.split(";")[0] } });
-  assert.equal(session.body.connected, true);
+  assert.equal(session.body.connected, false);
   assert.equal("credentials" in session.body, false);
   assert.equal(session.body.horizons.find(item => item.id === "semester").end, "2026-12-23");
-  assert.deepEqual((await call("/api/applications", { token: owner.token })).body.applications, [
+  assert.deepEqual((await call("/api/applications", { method: "POST", token: owner.token, body: ownerCredentials })).body.applications, [
     { start: "2026-09-18", end: "2026-09-20", active: true },
   ]);
-  assert.equal((await call("/api/applications", { token: other.token })).status, 200);
-  assert.equal((await call("/api/applications")).status, 401);
+  assert.equal((await call("/api/applications", { method: "POST", token: other.token, body: otherCredentials })).status, 200);
+  assert.equal((await call("/api/applications", { method: "POST", token: owner.token, body: {} })).status, 400);
+  assert.equal((await call("/api/applications", { method: "POST", body: ownerCredentials })).status, 401);
 
   const preview = await call("/api/batch/preview", previewRequest);
   assert.equal(preview.status, 200);
   assert.ok(preview.body.dates.length >= 29);
   assert.ok(preview.body.periods.length < preview.body.dates.length);
   assert.equal(batchCalls, 0);
-  assert.equal((await call("/api/batch/apply", { method: "POST", token: other.token, body: { plan: preview.body.plan } })).status, 403);
-  const accepted = await call("/api/batch/apply", { method: "POST", token: owner.token, body: { plan: preview.body.plan } });
-  assert.equal(accepted.status, 202);
-  const jobId = accepted.body.job.id;
+  assert.equal((await call("/api/batch/apply", { method: "POST", token: other.token, body: { plan: preview.body.plan, ...ownerCredentials } })).status, 403);
+  const jobId = preview.body.id;
+  const acceptedRequest = call("/api/batch/apply", { method: "POST", token: owner.token, body: { plan: preview.body.plan, ...ownerCredentials } });
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal((await call(`/api/batch/job?id=${jobId}`, { token: other.token })).body.job, null);
   assert.equal((await call(`/api/batch/job?id=${jobId}`, { token: owner.token })).body.job.status, "running");
-  assert.equal((await call("/api/batch/apply", { method: "POST", token: owner.token, body: { plan: preview.body.plan } })).body.job.id, jobId);
+  assert.equal((await call("/api/batch/apply", { method: "POST", token: owner.token, body: { plan: preview.body.plan, ...ownerCredentials } })).body.job.id, jobId);
   assert.equal(batchCalls, 1);
   assert.equal((await call("/api/account", { method: "DELETE", token: owner.token })).status, 409);
   assert.ok(optionsForBatch);
@@ -154,25 +157,26 @@ try {
   const cancelled = await call("/api/batch/cancel", { method: "POST", token: owner.token, body: { id: jobId } });
   assert.equal(cancelled.status, 200);
   assert.equal(cancelled.body.job.cancelRequested, true);
-  assert.equal(optionsForBatch.shouldStop(), true);
+  assert.equal(await optionsForBatch.shouldStop(), true);
   releaseBatch();
-  await app.drain();
+  assert.equal((await acceptedRequest).status, 200);
   const stoppedJob = (await call(`/api/batch/job?id=${jobId}`, { token: owner.token })).body.job;
   assert.equal(stoppedJob.status, "done");
   assert.equal(stoppedJob.outcome, "cancelled");
 
-  const singleBody = { id: randomUUID(), start: preview.body.dates[0], end: preview.body.dates[1] };
+  const singleBody = { id: randomUUID(), start: preview.body.dates[0], end: preview.body.dates[1], ...ownerCredentials };
   assert.equal((await call("/api/check", { method: "POST", token: owner.token, body: singleBody })).body.status, "available");
   assert.equal(singleCalls, 0);
   assert.equal((await call("/api/apply", { method: "POST", token: owner.token, body: { ...singleBody, id: "invalid-id" } })).status, 400);
-  const acceptedSingle = await call("/api/apply", { method: "POST", token: owner.token, body: singleBody });
-  assert.equal(acceptedSingle.status, 202);
-  assert.equal(acceptedSingle.body.job.id, singleBody.id);
+  const acceptedSingleRequest = call("/api/apply", { method: "POST", token: owner.token, body: singleBody });
+  await new Promise(resolve => setImmediate(resolve));
   assert.equal((await call("/api/apply", { method: "POST", token: owner.token, body: singleBody })).body.job.id, singleBody.id);
   assert.equal(singleCalls, 1);
   assert.equal((await call(`/api/batch/job?id=${singleBody.id}`, { token: other.token })).body.job, null);
   releaseSingle();
-  await app.drain();
+  const acceptedSingle = await acceptedSingleRequest;
+  assert.equal(acceptedSingle.status, 200);
+  assert.equal(acceptedSingle.body.job.id, singleBody.id);
   const finishedSingle = (await call(`/api/batch/job?id=${singleBody.id}`, { token: owner.token })).body.job;
   assert.equal(finishedSingle.status, "done");
   assert.equal(finishedSingle.outcome, "saved");
@@ -184,12 +188,12 @@ try {
   store.createJob(reconcileId, owner.id, [{ date: "20260918", end: "20260920" }]);
   store.updateJob(reconcileId, "done", { results: [{ date: "20260918", end: "20260920", status: "unknown" }] });
   const readsBeforeReconcile = applicationCalls;
-  const reconciled = await call("/api/batch/reconcile", { method: "POST", token: owner.token, body: { id: reconcileId } });
+  const reconciled = await call("/api/batch/reconcile", { method: "POST", token: owner.token, body: { id: reconcileId, ...ownerCredentials } });
   assert.equal(reconciled.status, 200);
   assert.equal(reconciled.body.job.results[0].status, "saved");
   assert.equal(applicationCalls, readsBeforeReconcile + 1);
   assert.equal(singleCalls, 1, "reconciliation must not submit at school");
-  assert.equal((await call("/api/batch/reconcile", { method: "POST", token: other.token, body: { id: reconcileId } })).status, 404);
+  assert.equal((await call("/api/batch/reconcile", { method: "POST", token: other.token, body: { id: reconcileId, ...otherCredentials } })).status, 404);
 
   // Multiple users behind one local tunnel must not consume each other's API quota.
   clock = new Date(clock.getTime() + 60_001);
@@ -203,7 +207,7 @@ try {
   const profileCount = store.database.prepare("SELECT COUNT(*) AS count FROM profiles").get().count;
   const rejectedReconnect = await call("/api/reconnect", { method: "POST", body: { studentId: "httpowner1", password: "wrong-fixture-password" } });
   assert.equal(rejectedReconnect.status, 502);
-  assert.equal(store.find(owner.token, { credentials: false }).id, owner.id);
+  assert.equal(store.find(owner.token).id, owner.id);
   const beforeReconnectLogins = loginCalls;
   const reconnected = await call("/api/login", { method: "POST", body: { studentId: "httpowner1", password: "fixture-password" } });
   assert.equal(reconnected.status, 201);
@@ -211,7 +215,7 @@ try {
   const renewedCookie = reconnected.headers["set-cookie"][0];
   const renewedToken = renewedCookie.split(";")[0].slice("overnight_session=".length);
   assert.match(renewedCookie, /; Secure/);
-  assert.equal(store.find(renewedToken, { credentials: false }).id, owner.id);
+  assert.equal(store.find(renewedToken).id, owner.id);
   assert.equal(store.database.prepare("SELECT COUNT(*) AS count FROM profiles").get().count, profileCount);
   assert.equal((await call("/api/session", { token: owner.token })).body.connected, false);
   const recoveredHistory = (await call("/api/batch/history", { token: renewedToken })).body.jobs;

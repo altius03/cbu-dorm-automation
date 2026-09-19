@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -14,7 +14,7 @@ function loadMasterKey(dataDirectory) {
   }
   const keyPath = join(dataDirectory, "master.key");
   if (!existsSync(keyPath)) {
-    if (existsSync(join(dataDirectory, "overnight.db"))) throw new Error("기존 계정 DB의 암호화 키가 없습니다. 원래 키를 복구해 주세요.");
+    if (existsSync(join(dataDirectory, "overnight.db"))) throw new Error("기존 계정 DB의 서버 키가 없습니다. 원래 키를 복구해 주세요.");
     writeFileSync(keyPath, randomBytes(32).toString("base64"), { flag: "wx", mode: 0o600 });
   }
   chmodSync(keyPath, 0o600);
@@ -48,6 +48,9 @@ function completed(result) {
   return { ...result, summary, outcome, message };
 }
 
+const accountHash = (key, studentId) => createHmac("sha256", key).update("overnight-account-v1\0" + studentId.trim().toLowerCase()).digest();
+const keyFingerprint = key => createHmac("sha256", key).update("overnight-key-guard-v1\0").digest();
+
 export class CredentialStore {
   constructor(dataDirectory) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
@@ -55,6 +58,7 @@ export class CredentialStore {
     this.key = loadMasterKey(dataDirectory);
     const databasePath = join(dataDirectory, "overnight.db");
     this.database = new DatabaseSync(databasePath);
+    let removedCredentials = false;
     try {
       chmodSync(databasePath, 0o600);
       this.database.exec(`
@@ -67,10 +71,14 @@ export class CredentialStore {
         this.database.exec(`
       CREATE TABLE IF NOT EXISTS profiles (
         id TEXT PRIMARY KEY,
+        account_key BLOB NOT NULL UNIQUE,
         token_hash BLOB NOT NULL UNIQUE,
-        credential_ciphertext TEXT NOT NULL,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS key_guard (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        fingerprint BLOB NOT NULL
       ) STRICT;
       CREATE TABLE IF NOT EXISTS used_setup_tokens (
         token_hash BLOB PRIMARY KEY,
@@ -106,11 +114,25 @@ export class CredentialStore {
           schedule.term, schedule.from, schedule.through, schedule.ends.semester, schedule.ends.sixMonths,
           schedule.ends.twelveMonths, schedule.source, schedule.updatedAt,
         );
-        // 잘못 교체한 키로 새 계정을 저장하기 전에 기존 암호문의 인증을 확인한다.
-        for (const row of this.database.prepare("SELECT id, credential_ciphertext FROM profiles").iterate()) {
-          try { unseal(row.credential_ciphertext, row.id, this.key); }
-          catch { throw new Error("저장된 계정을 복호화할 수 없습니다. 기존 암호화 키와 DB를 복구해 주세요."); }
+        const columns = new Set(this.database.prepare("PRAGMA table_info(profiles)").all().map(column => column.name));
+        if (!columns.has("account_key")) this.database.exec("ALTER TABLE profiles ADD COLUMN account_key BLOB");
+        if (columns.has("credential_ciphertext")) {
+          const update = this.database.prepare("UPDATE profiles SET account_key = ? WHERE id = ?");
+          for (const row of this.database.prepare("SELECT id, credential_ciphertext FROM profiles").iterate()) {
+            let identity;
+            try { identity = unseal(row.credential_ciphertext, row.id, this.key); }
+            catch { throw new Error("저장된 계정을 복호화할 수 없습니다. 기존 서버 키와 DB를 복구해 주세요."); }
+            update.run(accountHash(this.key, identity.studentId), row.id);
+          }
+          this.database.exec("ALTER TABLE profiles DROP COLUMN credential_ciphertext");
+          removedCredentials = true;
         }
+        if (this.database.prepare("SELECT 1 FROM profiles WHERE account_key IS NULL").get()) throw new Error("저장된 계정 식별 정보를 복구할 수 없습니다.");
+        this.database.exec("CREATE UNIQUE INDEX IF NOT EXISTS profiles_account_key ON profiles(account_key)");
+        const fingerprint = keyFingerprint(this.key);
+        const guard = this.database.prepare("SELECT fingerprint FROM key_guard WHERE id = 1").get();
+        if (guard && (guard.fingerprint.length !== fingerprint.length || !timingSafeEqual(guard.fingerprint, fingerprint))) throw new Error("저장된 계정의 원래 서버 키가 필요합니다.");
+        if (!guard) this.database.prepare("INSERT INTO key_guard VALUES (1, ?)").run(fingerprint);
         this.database.exec("COMMIT");
       } catch (error) {
         this.database.exec("ROLLBACK");
@@ -120,11 +142,15 @@ export class CredentialStore {
       this.database.close();
       throw error;
     }
+    if (removedCredentials) {
+      this.database.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      this.database.exec("VACUUM");
+    }
     this.findStatement = this.database.prepare(
-      "SELECT id, credential_ciphertext, created_at, updated_at FROM profiles WHERE token_hash = ?",
+      "SELECT id, account_key, created_at, updated_at FROM profiles WHERE token_hash = ?",
     );
     this.insertStatement = this.database.prepare(
-      "INSERT INTO profiles (id, token_hash, credential_ciphertext, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO profiles (id, account_key, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     );
     this.claimStatement = this.database.prepare(
       "UPDATE profiles SET token_hash = ?, updated_at = ? WHERE id = ? AND token_hash = ?",
@@ -136,6 +162,8 @@ export class CredentialStore {
     return Boolean(this.database.prepare("SELECT 1 FROM used_setup_tokens WHERE token_hash = ?").get(tokenHash(token)));
   }
 
+  accountKey(credentials) { return accountHash(this.key, credentials.studentId); }
+
   create(credentials, setupToken = "") {
     const id = randomUUID();
     const token = randomBytes(32).toString("base64url");
@@ -143,7 +171,7 @@ export class CredentialStore {
     this.database.exec("BEGIN IMMEDIATE");
     try {
       if (setupToken) this.database.prepare("INSERT INTO used_setup_tokens VALUES (?, ?)").run(tokenHash(setupToken), now);
-      this.insertStatement.run(id, tokenHash(token), seal(credentials, id, this.key), now, now);
+      this.insertStatement.run(id, this.accountKey(credentials), tokenHash(token), now, now);
       this.database.exec("COMMIT");
     } catch (error) {
       this.database.exec("ROLLBACK");
@@ -152,20 +180,20 @@ export class CredentialStore {
     return { id, token, createdAt: now };
   }
 
-  find(token, { credentials = true, now = Date.now() } = {}) {
+  find(token, { now = Date.now() } = {}) {
     if (typeof token !== "string" || token.length < 32 || token.length > 128) return null;
     const row = this.findStatement.get(tokenHash(token));
     const updatedAt = row ? Date.parse(row.updated_at) : NaN;
     if (!Number.isFinite(now) || !Number.isFinite(updatedAt) || now - updatedAt >= 31_536_000_000) return null;
     return {
       id: row.id,
+      accountKey: row.account_key,
       createdAt: row.created_at,
-      ...(credentials ? { credentials: unseal(row.credential_ciphertext, row.id, this.key) } : {}),
     };
   }
 
   claim(token, { now = Date.now() } = {}) {
-    const profile = this.find(token, { credentials: false, now });
+    const profile = this.find(token, { now });
     if (!profile) return null;
     const replacement = randomBytes(32).toString("base64url");
     const updated = this.claimStatement.run(
@@ -176,20 +204,15 @@ export class CredentialStore {
 
   // 호출자는 반드시 이 자격 증명으로 학교 로그인을 성공한 뒤 복구를 요청해야 한다.
   reconnect(credentials, { now = Date.now() } = {}) {
-    const studentId = credentials.studentId.trim();
     const timestamp = new Date(now).toISOString();
     this.database.exec("BEGIN IMMEDIATE");
     try {
-      let profile;
-      for (const row of this.database.prepare("SELECT id, credential_ciphertext, created_at FROM profiles ORDER BY updated_at DESC, rowid DESC").iterate()) {
-        const saved = unseal(row.credential_ciphertext, row.id, this.key);
-        if (saved.studentId.trim().toLowerCase() === studentId.toLowerCase()) { profile = row; break; }
-      }
+      const profile = this.database.prepare("SELECT id, created_at FROM profiles WHERE account_key = ?").get(this.accountKey(credentials));
       let result = null;
       if (profile) {
         const token = randomBytes(32).toString("base64url");
-        this.database.prepare("UPDATE profiles SET token_hash = ?, credential_ciphertext = ?, updated_at = ? WHERE id = ?")
-          .run(tokenHash(token), seal({ studentId, password: credentials.password }, profile.id, this.key), timestamp, profile.id);
+        this.database.prepare("UPDATE profiles SET token_hash = ?, updated_at = ? WHERE id = ?")
+          .run(tokenHash(token), timestamp, profile.id);
         result = { id: profile.id, token, createdAt: profile.created_at };
       }
       this.database.exec("COMMIT");
@@ -230,6 +253,27 @@ export class CredentialStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new Error("조회할 작업 개수가 올바르지 않습니다.");
     return this.database.prepare("SELECT * FROM batch_jobs WHERE profile_id = ? ORDER BY updated_at DESC, rowid DESC LIMIT ?")
       .all(profileId, limit).map(storedJob);
+  }
+
+  recoverJob(profileId, id, staleBefore = Date.now() - 360_000) {
+    if (typeof profileId !== "string" || typeof id !== "string" || !Number.isFinite(staleBefore)) return null;
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const row = this.database.prepare("SELECT * FROM batch_jobs WHERE profile_id = ? AND id = ?").get(profileId, id);
+      if (!row || row.status !== "running" || Date.parse(row.updated_at) > staleBefore) {
+        this.database.exec("COMMIT");
+        return storedJob(row);
+      }
+      const result = completed(jobResult(row.result));
+      result.message = "요청이 중단되었습니다. 확인 필요 결과는 학교 신청내역과 다시 대조해 주세요.";
+      this.database.prepare("UPDATE batch_jobs SET status = 'interrupted', result = ?, updated_at = ? WHERE id = ?")
+        .run(JSON.stringify(result), new Date().toISOString(), id);
+      this.database.exec("COMMIT");
+      return this.job(profileId, id);
+    } catch (error) {
+      this.database.exec("ROLLBACK");
+      throw error;
+    }
   }
 
   schedules() {
@@ -335,4 +379,4 @@ export class CredentialStore {
   }
 }
 
-export const internals = { decodeKey, seal, tokenHash, unseal };
+export const internals = { decodeKey, keyFingerprint, seal, tokenHash };

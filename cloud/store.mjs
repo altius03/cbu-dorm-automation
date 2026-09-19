@@ -1,10 +1,9 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { decodeKey, seal, tokenHash, unseal } from "../service/crypto.mjs";
+import { decodeKey, tokenHash } from "../service/crypto.mjs";
 import { HttpError } from "../service/errors.mjs";
 import { MAX_BATCH_DATES, parseIsoDate, validateResidencySchedule } from "../extension/core.mjs";
 
 export { HttpError as StoreError } from "../service/errors.mjs";
-const leaseMs = 360_000; // Must exceed the 300-second worker limit; an expired attempt is read-only reconciliation.
 const iso = value => new Date(value).toISOString();
 const validToken = token => typeof token === "string" && token.length >= 32 && token.length <= 128;
 const validId = id => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
@@ -56,14 +55,10 @@ export class PostgresStore {
       const fingerprint = this.hash("overnight-key-guard-v1", "");
       const [existing] = await tx.unsafe(`SELECT fingerprint FROM ${this.t.key_guard} WHERE id = 1`);
       if (!existing) {
-        for (const row of await tx.unsafe(`SELECT id, credential_ciphertext FROM ${this.t.profiles}`)) {
-          try { unseal(row.credential_ciphertext, row.id, this.key); }
-          catch { throw new Error("저장된 계정의 원래 암호화 키가 필요합니다."); }
-        }
         await tx.unsafe(`INSERT INTO ${this.t.key_guard} VALUES (1, $1) ON CONFLICT DO NOTHING`, [fingerprint]);
       }
       const [guard] = await tx.unsafe(`SELECT fingerprint FROM ${this.t.key_guard} WHERE id = 1`);
-      if (!guard || guard.fingerprint.length !== fingerprint.length || !timingSafeEqual(guard.fingerprint, fingerprint)) throw new Error("저장된 계정의 원래 암호화 키가 필요합니다.");
+      if (!guard || guard.fingerprint.length !== fingerprint.length || !timingSafeEqual(guard.fingerprint, fingerprint)) throw new Error("저장된 계정의 원래 서버 키가 필요합니다.");
     }).catch(error => { this.verified = null; throw error; });
     return this.verified;
   }
@@ -78,7 +73,7 @@ export class PostgresStore {
     try {
       return await this.transaction(async tx => {
         if (setupToken) await this.q(`INSERT INTO ${this.t.used_setup_tokens}(token_hash) VALUES ($1)`, [tokenHash(setupToken)], tx);
-        const [row] = await this.q(`INSERT INTO ${this.t.profiles}(id, account_key, token_hash, credential_ciphertext) VALUES ($1, $2, $3, $4) RETURNING created_at`, [id, this.accountKey(credentials), tokenHash(token), seal(credentials, id, this.key)], tx);
+        const [row] = await this.q(`INSERT INTO ${this.t.profiles}(id, account_key, token_hash) VALUES ($1, $2, $3) RETURNING created_at`, [id, this.accountKey(credentials), tokenHash(token)], tx);
         return { id, token, createdAt: iso(row.created_at) };
       });
     } catch (error) {
@@ -87,10 +82,10 @@ export class PostgresStore {
     }
   }
 
-  async find(token, { credentials = true, now = Date.now() } = {}) {
+  async find(token, { now = Date.now() } = {}) {
     if (!validToken(token) || !Number.isFinite(now)) return null;
-    const [row] = await this.q(`SELECT id, credential_ciphertext, created_at FROM ${this.t.profiles} WHERE token_hash = $1 AND updated_at > $2::timestamptz - interval '365 days'`, [tokenHash(token), iso(now)]);
-    return row ? { id: row.id, createdAt: iso(row.created_at), ...(credentials ? { credentials: unseal(row.credential_ciphertext, row.id, this.key) } : {}) } : null;
+    const [row] = await this.q(`SELECT id, account_key, created_at FROM ${this.t.profiles} WHERE token_hash = $1 AND updated_at > $2::timestamptz - interval '365 days'`, [tokenHash(token), iso(now)]);
+    return row ? { id: row.id, accountKey: row.account_key, createdAt: iso(row.created_at) } : null;
   }
 
   async claim(token, { now = Date.now() } = {}) {
@@ -106,7 +101,7 @@ export class PostgresStore {
       const [row] = await this.q(`SELECT id, created_at FROM ${this.t.profiles} WHERE account_key = $1 FOR UPDATE`, [this.accountKey(credentials)], tx);
       if (!row) return null;
       const token = randomBytes(32).toString("base64url");
-      await this.q(`UPDATE ${this.t.profiles} SET token_hash = $1, credential_ciphertext = $2, updated_at = $3 WHERE id = $4`, [tokenHash(token), seal(credentials, row.id, this.key), iso(now), row.id], tx);
+      await this.q(`UPDATE ${this.t.profiles} SET token_hash = $1, updated_at = $2 WHERE id = $3`, [tokenHash(token), iso(now), row.id], tx);
       return { id: row.id, token, createdAt: iso(row.created_at) };
     });
   }
@@ -160,6 +155,19 @@ export class PostgresStore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new HttpError(400, "조회할 작업 개수가 올바르지 않습니다.");
     return (await this.q(`SELECT * FROM ${this.t.batch_jobs} WHERE profile_id = $1 ORDER BY updated_at DESC, created_at DESC LIMIT $2`, [profileId, limit])).map(jobView);
   }
+  async recoverJob(profileId, id, staleBefore = Date.now() - 360_000) {
+    if (!validId(profileId) || !validId(id) || !Number.isFinite(staleBefore)) return null;
+    return this.transaction(async tx => {
+      const [row] = await this.q(`SELECT * FROM ${this.t.batch_jobs} WHERE profile_id = $1 AND id = $2 FOR UPDATE`, [profileId, id], tx);
+      if (!row || row.status !== "running" || new Date(row.updated_at).getTime() > staleBefore) return jobView(row);
+      const result = completeResult(row.result, row.cancel_requested);
+      result.message = "요청이 중단되었습니다. 확인 필요 결과는 학교 신청내역과 다시 대조해 주세요.";
+      const [updated] = await this.q(`UPDATE ${this.t.batch_jobs} SET status = 'interrupted', result = $3::jsonb,
+        attempt = NULL, claim_index = NULL, lease_until = NULL, dispatch_until = NULL, updated_at = clock_timestamp()
+        WHERE profile_id = $1 AND id = $2 RETURNING *`, [profileId, id, result], tx);
+      return jobView(updated);
+    });
+  }
   async schedules() {
     return (await this.q(`SELECT * FROM ${this.t.residency_schedules} ORDER BY starts_on`)).map(row => validateResidencySchedule({
       from: row.starts_on, through: row.through_on, term: row.term,
@@ -201,56 +209,6 @@ export class PostgresStore {
       return jobView(updated);
     });
   }
-  async getJobById(id) {
-    if (!validId(id)) return null;
-    const [row] = await this.q(`SELECT * FROM ${this.t.batch_jobs} WHERE id = $1`, [id]);
-    return row ? { ...jobView(row), profileId: row.profile_id } : null;
-  }
-  async credentialsForJob(id) {
-    if (!validId(id)) return null;
-    const [row] = await this.q(`SELECT p.id, p.credential_ciphertext FROM ${this.t.profiles} p JOIN ${this.t.batch_jobs} j ON j.profile_id = p.id WHERE j.id = $1 AND j.status = 'running'`, [id]);
-    return row ? unseal(row.credential_ciphertext, row.id, this.key) : null;
-  }
-
-  async claimDispatch(id) {
-    return (await this.q(`UPDATE ${this.t.batch_jobs} SET dispatch_until = clock_timestamp() + interval '6 minutes' WHERE id = $1 AND status = 'running' AND (dispatch_until IS NULL OR dispatch_until <= clock_timestamp()) RETURNING id`, [id])).length > 0;
-  }
-  async releaseDispatch(id) { await this.q(`UPDATE ${this.t.batch_jobs} SET dispatch_until = NULL WHERE id = $1 AND status = 'running'`, [id]); }
-
-  async claimNext(id) {
-    return this.transaction(async tx => {
-      const [row] = await this.q(`SELECT *, lease_until > clock_timestamp() AS live_lease FROM ${this.t.batch_jobs} WHERE id = $1 FOR UPDATE`, [id], tx);
-      if (!row || row.status !== "running") return { kind: "done" };
-      if (row.attempt && row.live_lease) return { kind: "busy" };
-      const result = row.result;
-      let index = row.attempt ? row.claim_index : result.results.findIndex(item => item.status === "unknown");
-      let kind = index >= 0 ? "reconcile" : "work";
-      if (index < 0 && !row.cancel_requested) index = result.results.findIndex(item => item.status === "not_attempted");
-      if (index < 0) {
-        await this.q(`UPDATE ${this.t.batch_jobs} SET status = 'done', result = $2::jsonb, updated_at = clock_timestamp() WHERE id = $1`, [id, completeResult(result, row.cancel_requested)], tx);
-        return { kind: "done" };
-      }
-      result.results[index].status = "unknown";
-      const attempt = randomUUID();
-      await this.q(`UPDATE ${this.t.batch_jobs} SET result = $2::jsonb, claim_index = $3, attempt = $4, lease_until = clock_timestamp() + interval '6 minutes', dispatch_until = clock_timestamp() + interval '6 minutes', updated_at = clock_timestamp() WHERE id = $1`, [id, result, index, attempt], tx);
-      return { kind, index, date: result.results[index].date, end: result.results[index].end || result.results[index].date, attempt };
-    });
-  }
-
-  async finishDate(id, { attempt, index, status, message }) {
-    if (!terminalDate.has(status) || !Number.isInteger(index)) throw new HttpError(400, "신청 결과 형식을 확인해 주세요.");
-    return this.transaction(async tx => {
-      const [row] = await this.q(`SELECT * FROM ${this.t.batch_jobs} WHERE id = $1 FOR UPDATE`, [id], tx);
-      if (!row || row.status !== "running" || row.attempt !== attempt || row.claim_index !== index) throw new HttpError(409, "신청 처리 소유권이 만료되었습니다.");
-      const result = row.result;
-      result.results[index] = { ...result.results[index], status, ...(typeof message === "string" ? { message: message.slice(0, 500) } : {}) };
-      const done = row.cancel_requested || ["unknown", "not_attempted"].includes(status) || result.results.every(item => ["saved", "exists", "overlap"].includes(item.status));
-      const finalResult = done ? completeResult(result, row.cancel_requested) : result;
-      const [updated] = await this.q(`UPDATE ${this.t.batch_jobs} SET status = $2, result = $3::jsonb, attempt = NULL, claim_index = NULL, lease_until = NULL, updated_at = clock_timestamp() WHERE id = $1 RETURNING *`, [id, done ? "done" : "running", finalResult], tx);
-      return jobView(updated);
-    });
-  }
-
   async cancelJob(profileId, id) {
     if (!validId(profileId) || !validId(id)) return null;
     const [row] = await this.q(`UPDATE ${this.t.batch_jobs} SET cancel_requested = CASE WHEN status = 'running' THEN true ELSE cancel_requested END, updated_at = CASE WHEN status = 'running' THEN clock_timestamp() ELSE updated_at END WHERE profile_id = $1 AND id = $2 RETURNING *`, [profileId, id]);
@@ -281,4 +239,4 @@ export class PostgresStore {
   async close() { await this.sql.end({ timeout: 5 }); }
 }
 
-export const internals = { datesForJob, completeResult, leaseMs };
+export const internals = { datesForJob, completeResult };

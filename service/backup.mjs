@@ -16,7 +16,7 @@ export async function backupData(source, destination) {
   const keyPath = join(source, "master.key");
   const localKey = existsSync(keyPath) ? readFileSync(keyPath, "utf8") : null;
   const encodedKey = process.env.OVERNIGHT_MASTER_KEY || localKey;
-  if (!encodedKey) throw new Error("원래 암호화 키가 필요합니다. master.key 또는 OVERNIGHT_MASTER_KEY를 복구해 주세요.");
+  if (!encodedKey) throw new Error("원래 서버 키가 필요합니다. master.key 또는 OVERNIGHT_MASTER_KEY를 복구해 주세요.");
   const key = internals.decodeKey(encodedKey);
   const keyIncluded = localKey !== null && localKey.trim().replace(/=$/, "") === key.toString("base64").slice(0, -1);
   const database = new DatabaseSync(join(source, "overnight.db"), { readOnly: true });
@@ -29,11 +29,10 @@ export async function backupData(source, destination) {
     const snapshot = new DatabaseSync(databasePath, { readOnly: true });
     try {
       if (snapshot.prepare("PRAGMA quick_check").all().some(row => row.quick_check !== "ok")) throw new Error();
-      for (const row of snapshot.prepare("SELECT id, credential_ciphertext FROM profiles").iterate()) {
-        internals.unseal(row.credential_ciphertext, row.id, key);
-      }
+      const guard = snapshot.prepare("SELECT fingerprint FROM key_guard WHERE id = 1").get();
+      if (!guard || !Buffer.from(guard.fingerprint).equals(internals.keyFingerprint(key))) throw new Error();
     } catch {
-      throw new Error("백업 DB 또는 암호화 키 검증에 실패했습니다. 이 폴더를 복구용 백업으로 사용하지 마세요.");
+      throw new Error("백업 DB 또는 서버 키 검증에 실패했습니다. 이 폴더를 복구용 백업으로 사용하지 마세요.");
     } finally {
       snapshot.close();
     }
@@ -56,7 +55,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     if (!destination || extra.length) throw new Error("사용법: node service/backup.mjs <새 백업 폴더> [원본 데이터 폴더]");
     const result = await backupData(source, destination);
-    console.log(result.keyIncluded ? "DB와 암호화 키 백업 및 복구 검증을 완료했습니다." : "DB 백업 및 검증을 완료했습니다. 복구에는 별도 보관한 기존 환경변수 암호화 키가 필요합니다.");
+    console.log(result.keyIncluded ? "DB와 서버 키 백업 및 복구 검증을 완료했습니다." : "DB 백업 및 검증을 완료했습니다. 복구에는 별도 보관한 기존 환경변수 서버 키가 필요합니다.");
   } catch {
     console.error(!destination || extra.length ? "사용법: node service/backup.mjs <새 백업 폴더> [원본 데이터 폴더]" : "백업하지 못했습니다. 원본 DB·키와 새 대상 경로를 확인하세요. manifest.json 없는 백업은 사용하지 마세요.");
     process.exitCode = 1;

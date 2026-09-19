@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -77,7 +77,7 @@ export function createApplication({
   store, portalFactory = credentials => new TukoreaPortal(credentials.studentId, credentials.password),
   setupToken = "", publicOrigin = "", secureCookie = false, now = () => new Date(),
   logger = entry => console.log(JSON.stringify(entry)),
-  enqueue = null, publicRegistration = false,
+  publicRegistration = false,
   clientAddress = request => request.socket.remoteAddress,
   localPort,
   page = readFileSync(join(here, "public", "index.html")),
@@ -105,19 +105,35 @@ export function createApplication({
   const cookie = (token, maxAge = 31_536_000) => [
     sessionCookieName + "=" + token, "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=" + maxAge, secureCookie ? "Secure" : "",
   ].filter(Boolean).join("; ");
-  const profileFrom = async (request, credentials = false) => {
+  const profileFrom = async request => {
     const cached = requestProfiles.get(request);
-    if (cached && (!credentials || cached.credentials)) return cached;
-    const profile = await store.find(cookieValue(request), { credentials, now: now().getTime() });
+    if (cached) return cached;
+    const profile = await store.find(cookieValue(request), { now: now().getTime() });
     if (profile) requestProfiles.set(request, profile);
     return profile;
   };
-  const requireProfile = async (request, credentials = false) => {
-    const profile = await profileFrom(request, credentials);
+  const requireProfile = async request => {
+    const profile = await profileFrom(request);
     if (!profile) throw new HttpError(401, "학교 포털에 먼저 로그인해 주세요.");
     return profile;
   };
-  const accountKey = profile => createHash("sha256").update(profile.credentials.studentId.toLowerCase()).digest("hex");
+  function credentialsFrom(body) {
+    const credentials = { studentId: typeof body?.studentId === "string" ? body.studentId.trim() : "", password: body?.password };
+    if (!/^[A-Za-z0-9]{4,32}$/.test(credentials.studentId) || typeof credentials.password !== "string" || credentials.password.length < 1 || credentials.password.length > 256) {
+      throw new HttpError(400, "학번과 비밀번호를 확인해 주세요.");
+    }
+    return credentials;
+  }
+  function liveCredentials(profile, body) {
+    const credentials = credentialsFrom(body);
+    const expected = Buffer.from(profile.accountKey || []);
+    const supplied = Buffer.from(store.accountKey(credentials));
+    if (!expected.length || expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) {
+      throw new HttpError(403, "이 서비스 계정의 학교 포털 아이디로 다시 로그인해 주세요.");
+    }
+    return credentials;
+  }
+  const accountKey = profile => profile.id;
   function withBusy(key, task) {
     if (store.withBusy) return store.withBusy(key, task);
     // ponytail: 단일 서버의 계정별 잠금. 다중 프로세스 운영 시 DB 임대 잠금으로 교체한다.
@@ -145,7 +161,7 @@ export function createApplication({
     const timestamp = now().getTime();
     for (const [key, value] of rates) if (value.until <= timestamp) rates.delete(key);
     // 로그인 시도만 IP로 제한하고, 인증된 조회는 프록시 뒤에서도 계정별로 제한한다.
-    const profile = auth ? null : await profileFrom(request, true);
+    const profile = auth ? null : await profileFrom(request);
     const key = auth ? "auth:" + clientAddress(request) : profile ? "profile:" + profile.id : "anonymous:" + clientAddress(request);
     if (store.consumeRate) return store.consumeRate(key, auth ? 10 : 120, 60_000);
     if (!rates.has(key)) {
@@ -171,17 +187,13 @@ export function createApplication({
 
   async function startJob(profile, id, dates, task, end) {
     const key = accountKey(profile);
-    if (busy.has(key)) throw new HttpError(409, "이 계정의 요청을 처리 중입니다. 완료 후 다시 시도해 주세요.");
-    await store.createJob(id, profile.id, end ? [{ date: dates[0], end }] : dates);
-    if (enqueue) {
-      await enqueue(id);
-      return store.job(profile.id, id);
-    }
-    const shouldStop = () => stopping || Boolean(store.job(profile.id, id)?.cancelRequested);
-    const progress = async result => store.updateJob(id, "running", {
-      ...result, cancelRequested: Boolean((await store.job(profile.id, id))?.cancelRequested),
-    });
-    void withBusy(key, async () => {
+    return withBusy(key, async () => {
+      await store.createJob(id, profile.id, end ? [{ date: dates[0], end }] : dates);
+      const deadline = Date.now() + 240_000;
+      const shouldStop = async () => stopping || Date.now() >= deadline || Boolean((await store.job(profile.id, id))?.cancelRequested);
+      const progress = async result => store.updateJob(id, "running", {
+        ...result, cancelRequested: Boolean((await store.job(profile.id, id))?.cancelRequested),
+      });
       try {
         const result = await task({ onProgress: progress, shouldStop });
         await store.updateJob(id, "done", { ...result, outcome: result.status });
@@ -191,8 +203,8 @@ export function createApplication({
           message: error instanceof PortalError ? error.message : "신청 처리가 중단되었습니다. 처리 결과와 학교 신청 내역을 확인해 주세요.",
         });
       }
-    }).catch(() => logger({ event: "job_persistence_failed" }));
-    return store.job(profile.id, id);
+      return store.job(profile.id, id);
+    });
   }
 
   function matchJob(existing, periods) {
@@ -227,38 +239,40 @@ export function createApplication({
     }
     await limit(request, ["/api/login", "/api/register", "/api/reconnect", "/api/claim"].includes(url.pathname));
     if (request.method === "GET" && url.pathname === "/api/session") {
-      const profile = await measure(phases, "databaseMs", () => profileFrom(request));
       const today = localIsoDate(koreaNow(now()));
       return sendJson(response, 200, {
-        connected: Boolean(profile), today, horizons: await currentHorizons(today, phases),
-        ...(profile ? { createdAt: profile.createdAt } : {}),
+        connected: false, today, horizons: await currentHorizons(today, phases),
       });
     }
     if (request.method === "GET" && url.pathname === "/api/batch/job") {
       const profile = await requireProfile(request);
-      const job = await store.job(profile.id, url.searchParams.get("id"));
-      if (enqueue && job?.status === "running") await enqueue(job.id);
+      let job = await store.job(profile.id, url.searchParams.get("id"));
+      if (job?.status === "running" && store.recoverJob) job = await store.recoverJob(profile.id, job.id);
       return sendJson(response, 200, { job });
     }
     if (request.method === "GET" && url.pathname === "/api/batch/history") {
       const profile = await requireProfile(request);
       return sendJson(response, 200, { jobs: await measure(phases, "databaseMs", () => store.jobs(profile.id)) });
     }
-    if (request.method === "GET" && url.pathname === "/api/applications") {
-      const profile = await requireProfile(request, true);
-      const applications = await measure(phases, "schoolApplicationsMs", () => withBusy(accountKey(profile), () => portalFactory(profile.credentials).applications()));
+    if (request.method === "POST" && url.pathname === "/api/applications") {
+      const body = await readJson(request);
+      const profile = await requireProfile(request);
+      const credentials = liveCredentials(profile, body);
+      const applications = await measure(phases, "schoolApplicationsMs", () => withBusy(accountKey(profile), () => portalFactory(credentials).applications()));
       return sendJson(response, 200, { applications });
     }
     if (request.method === "POST" && url.pathname === "/api/batch/reconcile") {
-      const { id } = await readJson(request);
+      const body = await readJson(request);
+      const { id } = body;
       if (typeof id !== "string") throw new HttpError(400, "확인할 신청 결과를 선택해 주세요.");
-      const profile = await requireProfile(request, true);
+      const profile = await requireProfile(request);
+      const credentials = liveCredentials(profile, body);
       const job = await measure(phases, "databaseMs", () => store.job(profile.id, id));
       if (!job) throw new HttpError(404, "신청 작업을 찾을 수 없습니다.");
       if (job.status === "running") throw new HttpError(409, "처리 중인 신청은 완료 후 다시 확인해 주세요.");
       const unknown = (job.results || []).map((row, index) => ({ row, index })).filter(item => item.row.status === "unknown");
       if (!unknown.length) return sendJson(response, 200, { job });
-      const applications = await measure(phases, "schoolApplicationsMs", () => withBusy(accountKey(profile), () => portalFactory(profile.credentials).applications()));
+      const applications = await measure(phases, "schoolApplicationsMs", () => withBusy(accountKey(profile), () => portalFactory(credentials).applications()));
       const rows = reconciliationRows(applications);
       const resolutions = unknown.map(({ row, index }) => {
         const conflict = findConflict(rows, row.date, row.end || row.date);
@@ -284,9 +298,7 @@ export function createApplication({
     }
     if (request.method === "POST" && url.pathname === "/api/login") {
       const body = await readJson(request);
-      if (await profileFrom(request)) throw new HttpError(409, "이미 로그인되어 있습니다.");
-      const credentials = { studentId: typeof body.studentId === "string" ? body.studentId.trim() : "", password: body.password };
-      if (!/^[A-Za-z0-9]{4,32}$/.test(credentials.studentId) || typeof credentials.password !== "string" || credentials.password.length < 1 || credentials.password.length > 256) throw new HttpError(400, "학번과 비밀번호를 확인해 주세요.");
+      const credentials = credentialsFrom(body);
       if (store.consumeRate) await store.consumeRate("school-login:" + credentials.studentId.toLowerCase(), 5, 60_000);
       const registrationKey = "registration:" + createHmac("sha256", store.key).update(credentials.studentId.toLowerCase()).digest("hex");
       const login = await withBusy(registrationKey, async () => {
@@ -327,8 +339,7 @@ export function createApplication({
       const supplied = Buffer.from(String(request.headers["x-setup-token"] || ""));
       const expected = Buffer.from(registrationToken);
       if (registrationToken && (supplied.length !== expected.length || !timingSafeEqual(supplied, expected))) throw new HttpError(403, "유효한 계정 연결 링크가 필요합니다.");
-      const credentials = { studentId: typeof body.studentId === "string" ? body.studentId.trim() : "", password: body.password };
-      if (!/^[A-Za-z0-9]{4,32}$/.test(credentials.studentId) || typeof credentials.password !== "string" || credentials.password.length < 1 || credentials.password.length > 256) throw new HttpError(400, "학번과 비밀번호를 확인해 주세요.");
+      const credentials = credentialsFrom(body);
       if (store.consumeRate) await store.consumeRate("school-login:" + credentials.studentId.toLowerCase(), 5, 60_000);
       const registrationKey = publicRegistration ? "registration:" + createHmac("sha256", store.key).update(credentials.studentId.toLowerCase()).digest("hex") : "registration";
       const profile = await withBusy(registrationKey, async () => {
@@ -356,20 +367,19 @@ export function createApplication({
     }
     if (request.method === "POST" && url.pathname === "/api/batch/apply") {
       const body = await readJson(request);
-      const profile = await requireProfile(request, true);
+      const profile = await requireProfile(request);
+      const credentials = liveCredentials(profile, body);
       const plan = decodePlan(body.plan, profile);
       const periods = groupBatchDates(plan.dates).map(({ start, end }) => ({ date: start.replaceAll("-", ""), end: end.replaceAll("-", "") }));
       const existing = await store.job(profile.id, plan.id);
       if (existing) {
         matchJob(existing, periods);
-        if (enqueue && existing.status === "running") await enqueue(existing.id);
         return sendJson(response, 200, { job: existing });
       }
       if (plan.expires <= now().getTime()) throw new HttpError(409, "미리보기가 만료되었습니다. 대상 날짜를 다시 확인해 주세요.");
       for (const date of plan.dates) periodFrom({ start: date }, koreaNow(now()));
-      // HTTP 연결이 끊겨도 진행 결과는 DB에 남기며 재요청은 동일 작업을 반환한다.
-      const job = await measure(phases, "dispatchMs", () => startJob(profile, plan.id, periods, options => portalFactory(profile.credentials).applyMany(periods, options)));
-      return sendJson(response, 202, { job });
+      const job = await measure(phases, "schoolApplyMs", () => startJob(profile, plan.id, periods, options => portalFactory(credentials).applyMany(periods, options)));
+      return sendJson(response, 200, { job });
     }
     if (request.method === "POST" && url.pathname === "/api/batch/cancel") {
       const { id } = await readJson(request);
@@ -383,7 +393,8 @@ export function createApplication({
     }
     if (request.method === "POST" && ["/api/check", "/api/apply"].includes(url.pathname)) {
       const body = await readJson(request);
-      const profile = await requireProfile(request, true);
+      const profile = await requireProfile(request);
+      const credentials = liveCredentials(profile, body);
       if (url.pathname === "/api/apply") {
         if (typeof body.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.id)) {
           throw new HttpError(400, "신청 정보를 다시 확인해 주세요.");
@@ -394,24 +405,23 @@ export function createApplication({
           try { period = { date: parseIsoDate(body.start).compact, end: parseIsoDate(body.end || body.start).compact }; }
           catch { throw new HttpError(400, "시작일과 종료일을 확인해 주세요."); }
           matchJob(existing, [period]);
-          if (enqueue && existing.status === "running") await enqueue(existing.id);
           return sendJson(response, 200, { job: existing });
         }
         const { start, end } = periodFrom(body, koreaNow(now()));
         const job = await measure(phases, "dispatchMs", () => startJob(profile, body.id, [start.compact], async ({ onProgress, shouldStop }) => {
-          if (shouldStop()) return { status: "cancelled", results: [{ date: start.compact, end: end.compact, status: "not_attempted" }], message: "신청을 중단했습니다." };
+          if (await shouldStop()) return { status: "cancelled", results: [{ date: start.compact, end: end.compact, status: "not_attempted" }], message: "신청을 중단했습니다." };
           await onProgress({ results: [{ date: start.compact, end: end.compact, status: "unknown" }], message: "신청 결과를 확인하고 있습니다." });
-          const result = await portalFactory(profile.credentials).apply(start.compact, end.compact, { shouldStop });
+          const result = await portalFactory(credentials).apply(start.compact, end.compact, { shouldStop });
           return { ...result, results: [{ date: start.compact, end: end.compact, status: result.status === "cancelled" ? "not_attempted" : result.status }] };
         }, end.compact));
-        return sendJson(response, 202, { job });
+        return sendJson(response, 200, { job });
       }
       const period = periodFrom(body, koreaNow(now()));
-      const result = await measure(phases, "schoolCheckMs", () => withBusy(accountKey(profile), () => portalFactory(profile.credentials).apply(period.start.compact, period.end.compact, { dryRun: true })));
+      const result = await measure(phases, "schoolCheckMs", () => withBusy(accountKey(profile), () => portalFactory(credentials).apply(period.start.compact, period.end.compact, { dryRun: true })));
       return sendJson(response, 200, result);
     }
     if (request.method === "DELETE" && url.pathname === "/api/account") {
-      const profile = await requireProfile(request, true);
+      const profile = await requireProfile(request);
       await withBusy(accountKey(profile), () => store.delete(profile.id));
       response.setHeader("Set-Cookie", cookie("", 0));
       return sendJson(response, 200, { deleted: true });
