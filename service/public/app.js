@@ -195,7 +195,7 @@ function renderCalendar() {
   }
   const viewMonth = `${state.viewYear}-${String(state.viewMonth + 1).padStart(2, "0")}`;
   prevMonthButton.disabled = viewMonth === state.today.slice(0, 7);
-  nextMonthButton.disabled = viewMonth === maxSelectableDate().slice(0, 7);
+  nextMonthButton.disabled = false;
   calendarGrid.replaceChildren();
 
   for (let index = 0; index < 42; index++) {
@@ -471,7 +471,7 @@ requestForm.addEventListener("submit", async event => {
 function moveMonth(offset) {
   const candidate = new Date(Date.UTC(state.viewYear, state.viewMonth + offset, 1));
   const month = isoAt(candidate).slice(0, 7);
-  if (month < state.today.slice(0, 7) || month > maxSelectableDate().slice(0, 7)) return;
+  if (month < state.today.slice(0, 7)) return;
   state.viewYear = candidate.getUTCFullYear();
   state.viewMonth = candidate.getUTCMonth();
   renderCalendar();
