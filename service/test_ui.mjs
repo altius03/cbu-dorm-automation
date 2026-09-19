@@ -14,11 +14,11 @@ assert.match(html, /<meta name="viewport" content="width=device-width, initial-s
 assert.match(html, /<form id="login-form">[\s\S]*autocomplete="username"[\s\S]*autocomplete="current-password"/);
 assert.match(html, /class="club-mark"[\s\S]*외박신청을 더 간단하게[\s\S]*로그인하고 시작하기/);
 assert.equal(html.match(/src="\/assets\/cbu-sleeping-owl-v2\.png"/g)?.length, 2);
-assert.match(html, /<header class="app-header">[\s\S]*class="club-mark"[\s\S]*외박신청<small>by cbu<\/small>/);
+assert.match(html, /<header class="app-header">[\s\S]*class="club-mark"[\s\S]*외박신청<small>by CBU<\/small>/);
 assert.doesNotMatch(html, /brand-mark|<span class="brand-mark">T<\/span>/);
 assert.equal(mascot.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
-assert.match(html, /<strong>외박신청<\/strong><small>by cbu<\/small>/);
-assert.match(html, /.login-brand strong \{ font-size: 32px; font-weight: 800; letter-spacing: -\.04em; \}/);
+assert.match(html, /<strong>외박신청<\/strong><small>by CBU<\/small>/);
+assert.match(html, /.login-brand strong \{ font-size: 32px; font-weight: 600; letter-spacing: -\.04em; \}/);
 assert.match(html, /<label for="student-id">포탈 아이디<\/label>/);
 assert.match(html, /class="club-link" href="https:\/\/www\.instagram\.com\/tukorea_cbu\/"[\s\S]*한국공학대 개발동아리 CBU[\s\S]*class="external-arrow"[\s\S]*↗/);
 assert.doesNotMatch(html, /\.club-link \{[^}]*background:/);
