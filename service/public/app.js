@@ -499,10 +499,10 @@ requestForm.addEventListener("submit", async event => {
   setBusy(true);
   try {
     const preview = await api("/api/batch/preview", { method: "POST", body: JSON.stringify(body) });
-    const first = preview.dates[0], last = preview.dates.at(-1);
+    const dateSummary = preview.periods.map(({ start, end }) => start === end ? formatDate(start) : `${formatDate(start)}~${formatDate(end)}`).join(", ");
     const confirmed = await openDialog({
-      title: "외박을 신청할까요?",
-      message: `${formatDate(first)}부터 ${formatDate(last)}까지\n${preview.dates.length}일을 ${preview.periods.length}개 기간으로 신청합니다.\n한 기간은 최대 7박 8일이며 기존 신청일은 제외됩니다.`,
+      title: "이 날짜로 신청할까요?",
+      message: `${dateSummary}\n총 ${preview.dates.length}일`,
       confirmLabel: "신청하기",
       cancelLabel: "취소",
     });
