@@ -29,7 +29,7 @@ assert.doesNotMatch(html, /TUK DORM|외박신청 로그인/);
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /31일 이내 선택 가능/);
 assert.doesNotMatch(html, /오늘부터 31일 안의 날짜를 선택하세요/);
-assert.match(html, /외박할 날짜를 선택하세요\. 연속된 날짜는 최대 7박 8일씩 신청돼요\./);
+assert.match(html, /<p class="control-copy">외박할 날짜를 선택하세요\.<\/p>/);
 assert.match(html, /오늘 포함 7일[\s\S]*오늘 포함 14일[\s\S]*한 달 단위 최대 기간/);
 assert.match(html, /<strong>매일<\/strong>[\s\S]*<strong>평일<\/strong>[\s\S]*<strong>주말<\/strong>[\s\S]*<strong>요일 지정<\/strong>/);
 assert.match(html, /<legend>어떤 날을<\/legend>[\s\S]*<legend>기간<\/legend>/);
