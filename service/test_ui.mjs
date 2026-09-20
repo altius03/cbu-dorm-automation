@@ -42,7 +42,7 @@ assert.match(html, /@media \(max-width: 760px\)[\s\S]*\.submit-bar \{ position: 
 assert.match(html, /\.control-panel \{ order: 1; \}[\s\S]*\.calendar-panel \{ order: 2; \}/);
 assert.match(html, /\.calendar-column \{ display: contents; \}[\s\S]*\.club-panel \{ order: 3; \}/);
 assert.match(html, /class="calendar-column"[\s\S]*class="panel calendar-panel"[\s\S]*class="panel club-panel"[\s\S]*class="panel control-panel"/);
-assert.match(html, /학교 신청내역[\s\S]*data-result="saved" hidden[\s\S]*data-result="unknown" hidden[\s\S]*data-result="exists overlap not_attempted" hidden/);
+assert.match(html, /선택한 날[\s\S]*이미 신청한 날[\s\S]*공휴일[\s\S]*data-result="saved" hidden[\s\S]*data-result="unknown" hidden[\s\S]*data-result="exists overlap not_attempted" hidden/);
 assert.match(html, /#login-status\[data-kind="error"\]/);
 assert.match(html, /<dialog id="service-dialog"[\s\S]*id="dialog-title"[\s\S]*id="dialog-message"[\s\S]*id="dialog-confirm"/);
 assert.match(html, /\.dialog-actions:has\(#dialog-confirm\[hidden\]\) \{ display: none; \}/);
@@ -74,6 +74,7 @@ assert.match(script, /prevMonthButton\.disabled = viewMonth === state\.today\.sl
 assert.match(script, /nextMonthButton\.disabled = false/);
 assert.match(script, /if \(!loadError\) show\(""\)/);
 assert.doesNotMatch(script, /학교 신청내역을 새로 불러왔습니다/);
+assert.doesNotMatch(html + script, /학교 신청내역/);
 assert.doesNotMatch(html + script, /·/);
 assert.doesNotMatch(script, /window\.confirm/);
 assert.match(script, /function openDialog\([\s\S]*serviceDialog\.showModal\(\)/);

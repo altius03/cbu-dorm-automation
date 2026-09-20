@@ -267,7 +267,7 @@ function renderCalendar() {
     button.dataset.mark = mark === "saved" ? "✓" : mark === "unknown" ? "!" : mark ? "–" : application ? "●" : "";
     const labels = [`${state.viewMonth + 1}월 ${day}일`];
     if (selected.has(iso)) labels.push("선택됨");
-    if (application) labels.push("학교 신청내역 있음");
+    if (application) labels.push("이미 신청한 날");
     if (holiday) labels.push(holiday.name);
     if (mark) labels.push(statusNames[mark] || "결과 확인 필요");
     button.setAttribute("aria-label", labels.join(", "));
@@ -587,7 +587,7 @@ reconcileButton.addEventListener("click", async () => {
   const id = state.activeJob?.id;
   if (!id || countStatuses(state.activeJob).unknown === 0) return;
   setBusy(true);
-  show("학교 신청내역을 읽어 확인 필요 결과를 대조하고 있습니다…");
+  show("이미 신청한 날짜를 불러와 결과를 다시 확인하고 있어요…");
   try {
     const { job, applications } = await api("/api/batch/reconcile", { method: "POST", body: JSON.stringify(credentialBody({ id })) });
     state.applications = applications || state.applications;
