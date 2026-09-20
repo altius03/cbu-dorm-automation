@@ -335,7 +335,15 @@ function countStatuses(job) {
 
 function showJobResult(job, counts, needsCheck) {
   const lines = [];
-  if (counts.saved) lines.push(`${counts.saved}개 기간 신청 완료`);
+  const saved = (job.results || []).filter(item => item.status === "saved");
+  if (saved.length) {
+    const dateSummary = saved.map(item => {
+      const start = compactToIso(item.date), end = compactToIso(item.end || item.date);
+      return start === end ? formatDate(start) : `${formatDate(start)}~${formatDate(end)}`;
+    }).join(", ");
+    const savedDays = saved.reduce((total, item) => total + datesBetween(compactToIso(item.date), compactToIso(item.end || item.date)).length, 0);
+    lines.push(dateSummary, `총 ${savedDays}일`);
+  }
   if (counts.exists + counts.overlap) lines.push(`${counts.exists + counts.overlap}개 기간 기존 신청으로 제외`);
   if (counts.not_attempted) lines.push(`${counts.not_attempted}개 기간 미처리`);
   if (counts.unknown) lines.push(`${counts.unknown}개 기간 확인 필요`);

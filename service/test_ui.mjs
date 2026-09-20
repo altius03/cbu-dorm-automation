@@ -74,6 +74,8 @@ assert.doesNotMatch(html + script, /·/);
 assert.doesNotMatch(script, /window\.confirm/);
 assert.match(script, /function openDialog\([\s\S]*serviceDialog\.showModal\(\)/);
 assert.match(script, /외박 신청이 완료됐어요/);
+assert.match(script, /item\.status === "saved"[\s\S]*dateSummary[\s\S]*총 \$\{savedDays\}일/);
+assert.doesNotMatch(script, /개 기간 신청 완료/);
 assert.match(script, /showLogin\(error\.message, "error"\)/);
 assert.doesNotMatch(script, /pageColor|themeColor/);
 assert.doesNotMatch(script, /학교 포탈 계정으로 로그인해 주세요/);
