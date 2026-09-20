@@ -41,6 +41,11 @@
       .field { display: grid; gap: 7px; margin-top: 18px; }
       .field label, legend { font-size: 14px; font-weight: 750; }
       .field input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid #cbd2dd; border-radius: 11px; background: white; }
+      .password-input { position: relative; }
+      .password-input input { padding-right: 48px; }
+      .password-toggle { position: absolute; top: 50%; right: 5px; display: grid; width: 38px; height: 38px; padding: 0; border: 0; place-items: center; transform: translateY(-50%); color: #667085; background: transparent; }
+      .password-toggle svg { width: 21px; height: 21px; }
+      .password-toggle[aria-pressed="false"] .password-slash { display: none; }
       .field input:focus, button:focus-visible, summary:focus-visible { outline: 3px solid rgba(51, 92, 255, .2); outline-offset: 2px; }
       .primary, .secondary, .ghost, .danger { min-height: 44px; padding: 0 16px; border: 0; border-radius: 11px; font-weight: 750; }
       .primary { color: white; background: var(--blue); }
@@ -78,6 +83,9 @@
       #service-dialog[data-kind="warning"] .dialog-mark, #service-dialog[data-kind="danger"] .dialog-mark { color: var(--red); background: #fff0ef; }
       .dialog-card h2 { margin: 0; font-size: 21px; }
       .dialog-message { margin: 9px 0 0; color: var(--muted); white-space: pre-line; }
+      .dialog-support { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 9px 10px; border-radius: 10px; color: #475467; background: var(--soft); font-size: 12px; }
+      .dialog-support code { color: #182230; font-weight: 800; }
+      .dialog-support button { min-height: 32px; padding: 0 8px; }
       .dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 24px; }
       .dialog-actions:has(#dialog-cancel[hidden]) { grid-template-columns: 1fr; }
       .dialog-actions:has(#dialog-confirm[hidden]) { display: none; }
@@ -195,7 +203,16 @@
             </div>
             <div class="field">
               <label for="password">포탈 비밀번호</label>
-              <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
+              <div class="password-input">
+                <input id="password" name="password" type="password" autocomplete="current-password" maxlength="256" required />
+                <button id="password-toggle" class="password-toggle" type="button" aria-label="비밀번호 보기" aria-pressed="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                    <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+                    <circle cx="12" cy="12" r="2.5" />
+                    <path class="password-slash" d="m4 4 16 16" />
+                  </svg>
+                </button>
+              </div>
             </div>
             <button class="primary" type="submit">로그인하고 시작하기</button>
           </form>
@@ -330,6 +347,10 @@
           <div id="dialog-mark" class="dialog-mark" aria-hidden="true" hidden></div>
           <h2 id="dialog-title"></h2>
           <p id="dialog-message" class="dialog-message"></p>
+          <div id="dialog-support" class="dialog-support" hidden>
+            <span>문의 코드 <code id="dialog-code"></code></span>
+            <button id="dialog-copy" class="ghost" type="button">복사</button>
+          </div>
           <div class="dialog-actions">
             <button id="dialog-cancel" class="secondary" type="submit" value="cancel">취소</button>
             <button id="dialog-confirm" class="primary" type="submit" value="confirm">확인</button>

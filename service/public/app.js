@@ -3,6 +3,8 @@ const appSection = document.querySelector("#app-section");
 const loginForm = document.querySelector("#login-form");
 const requestForm = document.querySelector("#request-form");
 const loginButton = loginForm.querySelector('button[type="submit"]');
+const passwordInput = document.querySelector("#password");
+const passwordToggle = document.querySelector("#password-toggle");
 const loginStatus = document.querySelector("#login-status");
 const status = document.querySelector("#status");
 const calendarGrid = document.querySelector("#calendar-grid");
@@ -29,6 +31,9 @@ const serviceDialog = document.querySelector("#service-dialog");
 const dialogMark = document.querySelector("#dialog-mark");
 const dialogTitle = document.querySelector("#dialog-title");
 const dialogMessage = document.querySelector("#dialog-message");
+const dialogSupport = document.querySelector("#dialog-support");
+const dialogCode = document.querySelector("#dialog-code");
+const dialogCopy = document.querySelector("#dialog-copy");
 const dialogCancel = document.querySelector("#dialog-cancel");
 const dialogConfirm = document.querySelector("#dialog-confirm");
 
@@ -71,7 +76,9 @@ function showLogin(message = "", kind = "") {
   loginStatus.dataset.kind = kind;
 }
 
-function openDialog({ title, message, confirmLabel = "확인", cancelLabel = "", kind = "confirm" }) {
+let dialogRequestId = "";
+
+function openDialog({ title, message, confirmLabel = "확인", cancelLabel = "", kind = "confirm", requestId = "" }) {
   const mark = kind === "success" ? "✓" : ["warning", "danger"].includes(kind) ? "!" : "";
   dialogTitle.textContent = title;
   dialogMessage.textContent = message;
@@ -81,6 +88,10 @@ function openDialog({ title, message, confirmLabel = "확인", cancelLabel = "",
   dialogCancel.hidden = !cancelLabel;
   dialogConfirm.textContent = confirmLabel;
   dialogConfirm.hidden = false;
+  dialogRequestId = requestId;
+  dialogCode.textContent = requestId.slice(0, 8).toUpperCase();
+  dialogCopy.textContent = "복사";
+  dialogSupport.hidden = !requestId;
   serviceDialog.dataset.kind = kind;
   serviceDialog.returnValue = "";
   serviceDialog.showModal();
@@ -92,6 +103,7 @@ function showProgressDialog() {
   dialogTitle.textContent = "외박신청을 처리하고 있어요";
   dialogMessage.textContent = "이 화면을 닫지 마세요.";
   dialogMark.hidden = true;
+  dialogSupport.hidden = true;
   dialogCancel.hidden = true;
   dialogConfirm.hidden = true;
   serviceDialog.dataset.kind = "progress";
@@ -105,6 +117,32 @@ function closeProgressDialog() {
 serviceDialog.addEventListener("cancel", event => {
   if (serviceDialog.dataset.kind === "progress") event.preventDefault();
 });
+
+dialogCopy.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(dialogRequestId);
+    dialogCopy.textContent = "복사됨";
+  } catch { dialogCopy.textContent = "복사 실패"; }
+});
+
+function showErrorDialog(error, { title = "문제가 발생했어요", retry = false } = {}) {
+  return openDialog({
+    title,
+    message: error.message,
+    confirmLabel: retry ? "다시 시도" : "확인",
+    cancelLabel: retry ? "닫기" : "",
+    kind: "warning",
+    requestId: error.requestId || "",
+  });
+}
+
+function setPasswordVisible(visible) {
+  passwordInput.type = visible ? "text" : "password";
+  passwordToggle.setAttribute("aria-pressed", String(visible));
+  passwordToggle.setAttribute("aria-label", visible ? "비밀번호 숨기기" : "비밀번호 보기");
+}
+
+passwordToggle.addEventListener("click", () => setPasswordVisible(passwordInput.type === "password"));
 
 function compactToIso(value) {
   return /^\d{8}$/.test(value || "") ? value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3") : value;
@@ -160,6 +198,7 @@ function setConnected(connected) {
   loginSection.hidden = connected;
   appSection.hidden = !connected;
   if (!connected) {
+    setPasswordVisible(false);
     activeCredentials = undefined;
     clearTimeout(jobTimer);
     batchRunning = false;
@@ -326,11 +365,17 @@ async function api(path, options = {}) {
     throw new Error("서버 연결이 끊겼습니다. 처리 결과를 다시 확인해 주세요.");
   }
   let body;
+  const requestId = response.headers.get("x-request-id") || "";
   try { body = await response.json(); }
-  catch { throw new Error("서버 응답을 확인할 수 없습니다."); }
+  catch {
+    const error = new Error("서버 응답을 확인할 수 없습니다.");
+    error.requestId = requestId;
+    throw error;
+  }
   if (!response.ok) {
     const error = new Error(body.error || `요청 실패 (${response.status})`);
     error.status = response.status;
+    error.requestId = body.requestId || requestId;
     if (response.status === 401) setConnected(false);
     throw error;
   }
@@ -354,25 +399,38 @@ function countStatuses(job) {
   return counts;
 }
 
-function showJobResult(job, counts, needsCheck) {
+function resultDateSummary(items) {
+  return items.map(item => {
+    const start = compactToIso(item.date), end = compactToIso(item.end || item.date);
+    return start === end ? formatDate(start) : `${formatDate(start)}~${formatDate(end)}`;
+  }).join(", ");
+}
+
+async function showJobResult(job, needsCheck) {
+  const results = job.results || [];
   const lines = [];
-  const saved = (job.results || []).filter(item => item.status === "saved");
+  const saved = results.filter(item => item.status === "saved");
+  const existing = results.filter(item => item.status === "exists" || item.status === "overlap");
+  const notAttempted = results.filter(item => item.status === "not_attempted");
+  const unknown = results.filter(item => item.status === "unknown");
+  const hasOtherResults = existing.length || notAttempted.length || unknown.length;
   if (saved.length) {
-    const dateSummary = saved.map(item => {
-      const start = compactToIso(item.date), end = compactToIso(item.end || item.date);
-      return start === end ? formatDate(start) : `${formatDate(start)}~${formatDate(end)}`;
-    }).join(", ");
     const savedDays = saved.reduce((total, item) => total + datesBetween(compactToIso(item.date), compactToIso(item.end || item.date)).length, 0);
-    lines.push(dateSummary, `총 ${savedDays}일`);
+    if (hasOtherResults) lines.push(`신청 완료\n${resultDateSummary(saved)}`);
+    else lines.push(resultDateSummary(saved), `총 ${savedDays}일`);
   }
-  if (counts.exists + counts.overlap) lines.push(`${counts.exists + counts.overlap}개 기간 기존 신청으로 제외`);
-  if (counts.not_attempted) lines.push(`${counts.not_attempted}개 기간 미처리`);
-  if (counts.unknown) lines.push(`${counts.unknown}개 기간 확인 필요`);
-  return openDialog({
+  if (existing.length) lines.push(`이미 신청한 날\n${resultDateSummary(existing)}`);
+  if (notAttempted.length) lines.push(`신청하지 못한 날\n${resultDateSummary(notAttempted)}`);
+  if (unknown.length) lines.push(`확인이 필요한 날\n${resultDateSummary(unknown)}`);
+  const shouldReconcile = unknown.length > 0;
+  const confirmed = await openDialog({
     title: needsCheck ? "신청 결과를 확인해 주세요" : "외박 신청이 완료됐어요",
-    message: lines.join("\n") || job.message || "신청 처리가 끝났습니다.",
+    message: lines.join(hasOtherResults ? "\n\n" : "\n") || job.message || "신청 처리가 끝났습니다.",
+    confirmLabel: shouldReconcile ? "결과 다시 확인" : "확인",
+    cancelLabel: shouldReconcile ? "닫기" : "",
     kind: needsCheck ? "warning" : "success",
   });
+  if (shouldReconcile && confirmed) await reconcileActiveJob();
 }
 
 function showJob(job, remember = true) {
@@ -394,7 +452,7 @@ function showJob(job, remember = true) {
     show("");
     if (job.id && !notifiedJobs.has(job.id)) {
       notifiedJobs.add(job.id);
-      void showJobResult(job, counts, needsCheck);
+      void showJobResult(job, needsCheck);
     }
   }
   updateControls();
@@ -470,7 +528,8 @@ async function submitJob(plan, id) {
     else await loadHistory();
   } catch (error) {
     finishProgress();
-    show(error.message, "error");
+    show("");
+    await showErrorDialog(error, { title: error.status && error.status < 500 ? "신청을 시작하지 못했어요" : "신청 결과를 바로 확인하지 못했어요" });
     if (error.status && error.status < 500) {
       batchRunning = false;
       unresolvedJob = false;
@@ -523,12 +582,14 @@ loginForm.addEventListener("submit", async event => {
     });
     activeCredentials = credentials;
     loginForm.reset();
+    setPasswordVisible(false);
     showLogin();
     configureSession(session);
     setConnected(true);
     await loadDashboard(session);
   } catch (error) {
-    showLogin(error.message, "error");
+    showLogin();
+    await showErrorDialog(error, { title: "로그인하지 못했어요" });
   } finally { setBusy(false); }
 });
 
@@ -538,6 +599,7 @@ requestForm.addEventListener("submit", async event => {
   const dates = activeDates();
   if (!dates.length) return;
   const body = { dates };
+  let retry = false;
   setBusy(true);
   try {
     const preview = await api("/api/batch/preview", { method: "POST", body: JSON.stringify(body) });
@@ -551,8 +613,11 @@ requestForm.addEventListener("submit", async event => {
     if (!confirmed) return;
     setBusy(false);
     await submitJob(preview.plan, preview.id);
-  } catch (error) { show(error.message, "error"); }
+  } catch (error) {
+    retry = await showErrorDialog(error, { title: "신청을 시작하지 못했어요", retry: error.status !== 401 });
+  }
   finally { setBusy(false); }
+  if (retry) requestForm.requestSubmit();
 });
 
 function moveMonth(offset) {
@@ -574,38 +639,55 @@ todayMonthButton.addEventListener("click", () => {
 });
 
 refreshButton.addEventListener("click", async () => {
+  let retry = false;
   setBusy(true);
   try {
     await Promise.all([loadHistory(), loadApplications()]);
     if (requestedJobId) await refreshJob(requestedJobId);
     else show("");
-  } catch (error) { show(error.message, "error"); }
+  } catch (error) {
+    show("");
+    retry = await showErrorDialog(error, { title: "새로고침하지 못했어요", retry: error.status !== 401 });
+  }
   finally { setBusy(false); }
+  if (retry) refreshButton.click();
 });
 
-reconcileButton.addEventListener("click", async () => {
+async function reconcileActiveJob() {
   const id = state.activeJob?.id;
   if (!id || countStatuses(state.activeJob).unknown === 0) return;
   setBusy(true);
   show("이미 신청한 날짜를 불러와 결과를 다시 확인하고 있어요…");
+  let retry = false;
   try {
     const { job, applications } = await api("/api/batch/reconcile", { method: "POST", body: JSON.stringify(credentialBody({ id })) });
     state.applications = applications || state.applications;
     state.jobs = state.jobs.map(item => item.id === job.id ? job : item);
+    notifiedJobs.delete(job.id);
     showJob(job);
-  } catch (error) { show(error.message, "error"); }
+  } catch (error) {
+    show("");
+    retry = await showErrorDialog(error, { title: "결과를 다시 확인하지 못했어요", retry: error.status !== 401 });
+  }
   finally { setBusy(false); }
-});
+  if (retry) await reconcileActiveJob();
+}
+
+reconcileButton.addEventListener("click", reconcileActiveJob);
 
 cancelButton.addEventListener("click", async () => {
   if (!requestedJobId || cancelRequested || !batchRunning) return;
+  let retry = false;
   setBusy(true);
   try {
     const { job } = await api("/api/batch/cancel", { method: "POST", body: JSON.stringify({ id: requestedJobId }) });
     showJob(job);
     if (batchRunning) scheduleJob(job.id);
-  } catch (error) { show(error.message, "error"); }
+  } catch (error) {
+    retry = await showErrorDialog(error, { title: "중단을 요청하지 못했어요", retry: error.status !== 401 });
+  }
   finally { setBusy(false); }
+  if (retry) cancelButton.click();
 });
 
 logoutButton.addEventListener("click", async () => {
@@ -614,7 +696,7 @@ logoutButton.addEventListener("click", async () => {
     await api("/api/logout", { method: "POST", body: "{}" });
     setConnected(false);
     showLogin("로그아웃했습니다.");
-  } catch (error) { show(error.message, "error"); }
+  } catch (error) { await showErrorDialog(error, { title: "로그아웃하지 못했어요" }); }
   finally { setBusy(false); }
 });
 
@@ -632,7 +714,7 @@ deleteButton.addEventListener("click", async () => {
     await api("/api/account", { method: "DELETE", body: "{}" });
     setConnected(false);
     showLogin("저장정보를 삭제했습니다.");
-  } catch (error) { show(error.message, "error"); }
+  } catch (error) { await showErrorDialog(error, { title: "기록을 삭제하지 못했어요" }); }
   finally { setBusy(false); }
 });
 
