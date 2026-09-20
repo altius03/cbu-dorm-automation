@@ -49,7 +49,7 @@ function savedTheme() {
 
 function applyTheme(theme = savedTheme() || (systemTheme.matches ? "dark" : "light")) {
   document.documentElement.dataset.theme = theme;
-  themeColor.content = theme === "dark" ? "#080b12" : "#ffffff";
+  themeColor.content = theme === "dark" ? "#08090b" : "#ffffff";
   for (const button of themeButtons) {
     const label = theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환";
     button.textContent = theme === "dark" ? "☀︎" : "☾";
