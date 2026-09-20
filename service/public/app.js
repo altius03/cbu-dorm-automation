@@ -36,6 +36,36 @@ const dialogCode = document.querySelector("#dialog-code");
 const dialogCopy = document.querySelector("#dialog-copy");
 const dialogCancel = document.querySelector("#dialog-cancel");
 const dialogConfirm = document.querySelector("#dialog-confirm");
+const themeColor = document.querySelector('meta[name="theme-color"]');
+const themeButtons = document.querySelectorAll("[data-theme-toggle]");
+const systemTheme = matchMedia("(prefers-color-scheme: dark)");
+
+function savedTheme() {
+  try {
+    const value = localStorage.getItem("overnight_theme");
+    return value === "light" || value === "dark" ? value : "";
+  } catch { return ""; }
+}
+
+function applyTheme(theme = savedTheme() || (systemTheme.matches ? "dark" : "light")) {
+  document.documentElement.dataset.theme = theme;
+  themeColor.content = theme === "dark" ? "#0f1117" : "#ffffff";
+  for (const button of themeButtons) {
+    const label = theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환";
+    button.textContent = theme === "dark" ? "☀︎" : "☾";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", String(theme === "dark"));
+    button.title = label;
+  }
+}
+
+for (const button of themeButtons) button.addEventListener("click", () => {
+  const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("overnight_theme", theme); } catch {}
+  applyTheme(theme);
+});
+systemTheme.addEventListener?.("change", () => { if (!savedTheme()) applyTheme(); });
+applyTheme();
 
 const state = {
   today: "",

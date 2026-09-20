@@ -13,6 +13,7 @@ assert.match(client, /activeCredentials/);
 assert.match(cloud, /DATA_GO_KR_SERVICE_KEY/);
 assert.match(cloud, /CRON_SECRET/);
 assert.match(server, /\/api\/cron\/holidays/);
-assert.doesNotMatch(client, /localStorage|sessionStorage\.setItem\([^)]*(?:password|studentId)/);
+assert.deepEqual([...client.matchAll(/localStorage\.(?:getItem|setItem)\("([^"]+)"/g)].map(match => match[1]), ["overnight_theme", "overnight_theme"]);
+assert.doesNotMatch(client, /(?:localStorage|sessionStorage)\.setItem\([^)]*(?:password|studentId)/);
 
 console.log("cloud HTTP checks passed: no workflow credential dependency, fresh-login session, memory-only client credentials");
