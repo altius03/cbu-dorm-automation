@@ -269,7 +269,7 @@ function updateSelection() {
   patternHelp.textContent = document.querySelector('input[name="pattern"]:checked')?.dataset.help || "";
   const dates = activeDates();
   selectionSummary.textContent = dates.length
-    ? `${formatDate(dates[0])}부터 ${formatDate(dates.at(-1))}까지 ${dates.length}일 선택`
+    ? dates.length === 1 ? `${formatDate(dates[0])} 1일 선택` : `${formatDate(dates[0])}부터 ${formatDate(dates.at(-1))}까지 ${dates.length}일 선택`
     : manualMode.checked ? "달력에서 날짜를 선택해 주세요." : "신청할 날짜가 없습니다.";
   submitButton.textContent = dates.length ? `선택한 ${dates.length}일 신청하기` : "날짜를 선택해 주세요";
   submitButton.disabled = !dates.length || actionBusy || batchRunning || unresolvedJob;
