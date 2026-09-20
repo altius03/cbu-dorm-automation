@@ -45,6 +45,7 @@ assert.match(html, /class="calendar-column"[\s\S]*class="panel calendar-panel"[\
 assert.match(html, /학교 신청내역[\s\S]*data-result="saved" hidden[\s\S]*data-result="unknown" hidden[\s\S]*data-result="exists overlap not_attempted" hidden/);
 assert.match(html, /#login-status\[data-kind="error"\]/);
 assert.match(html, /<dialog id="service-dialog"[\s\S]*id="dialog-title"[\s\S]*id="dialog-message"[\s\S]*id="dialog-confirm"/);
+assert.match(html, /\.dialog-actions:has\(#dialog-confirm\[hidden\]\) \{ display: none; \}/);
 assert.match(html, /id="reconcile-job"[\s\S]*자동 선택[\s\S]*달력 직접 선택/);
 assert.match(html, /id="holiday-meta"/);
 assert.doesNotMatch(html, /공휴일을 제외한 월요일부터 금요일까지/);
@@ -76,6 +77,10 @@ assert.doesNotMatch(script, /학교 신청내역을 새로 불러왔습니다/);
 assert.doesNotMatch(html + script, /·/);
 assert.doesNotMatch(script, /window\.confirm/);
 assert.match(script, /function openDialog\([\s\S]*serviceDialog\.showModal\(\)/);
+assert.match(script, /applicationSubmitting \? "신청 중…"/);
+assert.match(script, /setTimeout\(showProgressDialog, 2000\)/);
+assert.match(script, /외박신청을 처리하고 있어요[\s\S]*이 화면을 닫지 마세요\./);
+assert.match(script, /closeProgressDialog\(\)[\s\S]*serviceDialog\.dataset\.kind === "progress"/);
 assert.match(script, /외박 신청이 완료됐어요/);
 assert.match(script, /item\.status === "saved"[\s\S]*dateSummary[\s\S]*총 \$\{savedDays\}일/);
 assert.doesNotMatch(script, /개 기간 신청 완료/);

@@ -46,6 +46,7 @@ const state = {
 let jobTimer;
 let batchRunning = false;
 let actionBusy = false;
+let applicationSubmitting = false;
 let checkingJob = false;
 let unresolvedJob = false;
 let cancelRequested = false;
@@ -79,11 +80,31 @@ function openDialog({ title, message, confirmLabel = "확인", cancelLabel = "",
   dialogCancel.textContent = cancelLabel;
   dialogCancel.hidden = !cancelLabel;
   dialogConfirm.textContent = confirmLabel;
+  dialogConfirm.hidden = false;
   serviceDialog.dataset.kind = kind;
   serviceDialog.returnValue = "";
   serviceDialog.showModal();
   return new Promise(resolve => serviceDialog.addEventListener("close", () => resolve(serviceDialog.returnValue === "confirm"), { once: true }));
 }
+
+function showProgressDialog() {
+  if (serviceDialog.open) return;
+  dialogTitle.textContent = "외박신청을 처리하고 있어요";
+  dialogMessage.textContent = "이 화면을 닫지 마세요.";
+  dialogMark.hidden = true;
+  dialogCancel.hidden = true;
+  dialogConfirm.hidden = true;
+  serviceDialog.dataset.kind = "progress";
+  serviceDialog.showModal();
+}
+
+function closeProgressDialog() {
+  if (serviceDialog.open && serviceDialog.dataset.kind === "progress") serviceDialog.close();
+}
+
+serviceDialog.addEventListener("cancel", event => {
+  if (serviceDialog.dataset.kind === "progress") event.preventDefault();
+});
 
 function compactToIso(value) {
   return /^\d{8}$/.test(value || "") ? value.replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3") : value;
@@ -271,7 +292,7 @@ function updateSelection() {
   selectionSummary.textContent = dates.length
     ? dates.length === 1 ? `${formatDate(dates[0])} 1일 선택` : `${formatDate(dates[0])}~${formatDate(dates.at(-1))} 중 ${dates.length}일 선택`
     : manualMode.checked ? "달력에서 날짜를 선택해 주세요." : "신청할 날짜가 없습니다.";
-  submitButton.textContent = dates.length ? `선택한 ${dates.length}일 신청하기` : "날짜를 선택해 주세요";
+  submitButton.textContent = applicationSubmitting ? "신청 중…" : dates.length ? `선택한 ${dates.length}일 신청하기` : "날짜를 선택해 주세요";
   submitButton.disabled = !dates.length || actionBusy || batchRunning || unresolvedJob;
   renderCalendar();
 }
@@ -433,19 +454,32 @@ async function submitJob(plan, id) {
   rememberJob(id);
   batchRunning = true;
   unresolvedJob = true;
+  applicationSubmitting = true;
   updateControls();
+  const progressTimer = setTimeout(showProgressDialog, 2000);
+  const finishProgress = () => {
+    clearTimeout(progressTimer);
+    closeProgressDialog();
+    applicationSubmitting = false;
+  };
   try {
     const { job } = await api("/api/batch/apply", { method: "POST", body: JSON.stringify(credentialBody({ plan })), timeout: 270_000 });
+    finishProgress();
     showJob(job);
     if (batchRunning) scheduleJob(job.id);
     else await loadHistory();
   } catch (error) {
+    finishProgress();
     show(error.message, "error");
     if (error.status && error.status < 500) {
+      batchRunning = false;
       unresolvedJob = false;
       rememberJob(undefined);
       if (error.status === 409) await refreshJob();
     } else await refreshJob(id);
+  } finally {
+    finishProgress();
+    updateControls();
   }
 }
 

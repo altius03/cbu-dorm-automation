@@ -80,6 +80,7 @@
       .dialog-message { margin: 9px 0 0; color: var(--muted); white-space: pre-line; }
       .dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 24px; }
       .dialog-actions:has(#dialog-cancel[hidden]) { grid-template-columns: 1fr; }
+      .dialog-actions:has(#dialog-confirm[hidden]) { display: none; }
       .dialog-actions button { width: 100%; }
       #service-dialog[data-kind="danger"] #dialog-confirm { color: white; background: var(--red); }
       .workspace { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .8fr); gap: 18px; align-items: start; }
