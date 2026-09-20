@@ -100,6 +100,7 @@
       .day:hover:not(:disabled) { background: #f0f3ff; }
       .day.is-today { border-color: #8ea5ff; }
       .day.is-selected { color: white; background: var(--blue); }
+      .day.is-selected:disabled { opacity: 1; }
       .day.is-past { color: #b4bac4; }
       .day.is-holiday:not(.is-selected) { color: var(--red); }
       .day.is-holiday::before { position: absolute; top: 4px; right: 5px; content: "휴"; color: var(--red); font-size: 9px; font-weight: 900; }

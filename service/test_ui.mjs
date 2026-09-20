@@ -28,6 +28,7 @@ assert.doesNotMatch(html, /날짜만 고르면 신청은 자동으로|비밀번�
 assert.doesNotMatch(html, /TUK DORM|외박신청 로그인/);
 assert.match(html, /id="calendar-grid" role="grid"/);
 assert.match(html, /31일 이내 선택 가능/);
+assert.match(html, /\.day\.is-selected:disabled \{ opacity: 1; \}/);
 assert.doesNotMatch(html, /오늘부터 31일 안의 날짜를 선택하세요/);
 assert.match(html, /<p class="control-copy">외박할 날짜를 선택하세요\.<\/p>/);
 assert.match(html, /오늘 포함 7일[\s\S]*오늘 포함 14일[\s\S]*한 달 단위 최대 기간/);
@@ -62,6 +63,7 @@ assert.match(script, /pattern === "weekdays"[\s\S]*return day >= 1 && day <= 5/)
 assert.doesNotMatch(script, /pattern === "weekdays"[^\n]*holidayFor/);
 assert.match(script, /addDays\(state\.today, state\.maxSelectionDays - 1\)/);
 assert.match(script, /dates\.length === 1 \? `\$\{formatDate\(dates\[0\]\)\} 1일 선택`/);
+assert.match(script, /\$\{formatDate\(dates\[0\]\)\}~\$\{formatDate\(dates\.at\(-1\)\)\} 중 \$\{dates\.length\}일 선택/);
 assert.match(script, /preview\.periods\.map\([\s\S]*dateSummary/);
 assert.match(script, /title: "이 날짜로 신청할까요\?"[\s\S]*총 \$\{preview\.dates\.length\}일/);
 assert.doesNotMatch(script, /한 기간은 최대 7박 8일이며 기존 신청일은 제외됩니다/);
