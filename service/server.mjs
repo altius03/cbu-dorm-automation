@@ -149,7 +149,7 @@ export function createApplication({
     return promise;
   }
 
-  function guard(request) {
+  function guard(request, allowExternalPage = false) {
     const port = localPort ?? request.socket.localPort;
     const localOrigins = Number.isInteger(port) && port > 0
       ? ["127.0.0.1", "localhost", "[::1]"].map(host => "http://" + host + ":" + port) : [];
@@ -159,7 +159,7 @@ export function createApplication({
       throw new HttpError(403, "허용되지 않은 서비스 주소입니다.");
     }
     const site = request.headers["sec-fetch-site"];
-    if (site && !["same-origin", "none"].includes(site)) throw new HttpError(403, "다른 사이트에서 보낸 요청은 허용하지 않습니다.");
+    if (!allowExternalPage && site && !["same-origin", "none"].includes(site)) throw new HttpError(403, "다른 사이트에서 보낸 요청은 허용하지 않습니다.");
     return origin;
   }
 
@@ -232,7 +232,7 @@ export function createApplication({
   async function route(request, response, phases) {
     const url = new URL(request.url, "http://localhost");
     const holidayCron = request.method === "GET" && url.pathname === "/api/cron/holidays";
-    const origin = holidayCron ? "" : guard(request);
+    const origin = holidayCron ? "" : guard(request, request.method === "GET" && url.pathname === "/");
     if (stopping && request.method !== "GET") throw new HttpError(503, "서버가 재시작 중입니다. 잠시 후 다시 시도해 주세요.");
     if (request.method === "GET" && ["/", "/app.js"].includes(url.pathname)) {
       const body = url.pathname === "/" ? page : script;

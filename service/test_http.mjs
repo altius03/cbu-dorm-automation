@@ -96,6 +96,7 @@ try {
   assert.ok(health.headers["x-request-id"]);
   const html = await call("/");
   assert.equal(html.status, 200);
+  assert.equal((await call("/", { headers: { "Sec-Fetch-Site": "cross-site" } })).status, 200);
   assert.match(html.body, /id="login-form"/);
   assert.match(html.body, /id="calendar-grid"/);
   assert.match(html.body, /오늘 포함 7일/);
