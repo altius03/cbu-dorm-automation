@@ -49,7 +49,7 @@ function savedTheme() {
 
 function applyTheme(theme = savedTheme() || (systemTheme.matches ? "dark" : "light")) {
   document.documentElement.dataset.theme = theme;
-  themeColor.content = theme === "dark" ? "#0f1117" : "#ffffff";
+  themeColor.content = theme === "dark" ? "#0a0d13" : "#ffffff";
   for (const button of themeButtons) {
     const label = theme === "dark" ? "라이트 모드로 전환" : "다크 모드로 전환";
     button.textContent = theme === "dark" ? "☀︎" : "☾";
@@ -329,6 +329,7 @@ function renderCalendar() {
     button.dataset.date = iso;
     if (iso === state.today) button.classList.add("is-today");
     if (iso < state.today) button.classList.add("is-past");
+    if (iso > maxSelectableDate()) button.classList.add("is-unavailable");
     if (selected.has(iso)) button.classList.add("is-selected");
     if (application) button.classList.add("has-application");
     if (holiday) button.classList.add("is-holiday");

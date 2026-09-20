@@ -13,6 +13,7 @@
         background: var(--page);
         --page: #fff;
         --surface: #fff;
+        --field: #fff;
         --ink: #182230;
         --text: #344054;
         --brand: #8b7343;
@@ -25,10 +26,13 @@
         --blue-text: #2947aa;
         --line: #dfe4ec;
         --input-line: #cbd2dd;
+        --selected-line: #7891f8;
         --muted: #667085;
+        --past: #98a2b3;
         --soft: #f7f8fa;
         --soft-strong: #edf0f4;
         --hover: #f0f3ff;
+        --focus: rgba(51, 92, 255, .2);
         --green: #14804a;
         --green-line: #bce8ce;
         --green-soft: #effaf3;
@@ -46,24 +50,28 @@
       }
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --page: #0f1117;
-        --surface: #181b22;
-        --ink: #f4f6f8;
-        --text: #d8dde6;
-        --brand: #d1b777;
-        --saturday: #8aa4ff;
+        --page: #0a0d13;
+        --surface: #202a38;
+        --field: #111820;
+        --ink: #f8fafc;
+        --text: #e7ecf3;
+        --brand: #e0c68b;
+        --saturday: #9bb0ff;
         --blue: #4668f2;
         --blue-dark: #3c5bd6;
-        --blue-line: #334a86;
-        --blue-soft: #192544;
-        --blue-soft-strong: #182746;
-        --blue-text: #b4c1ff;
-        --line: #303642;
-        --input-line: #444c5b;
-        --muted: #9aa4b2;
-        --soft: #22262e;
-        --soft-strong: #292e38;
-        --hover: #222c49;
+        --blue-line: #5c74c9;
+        --blue-soft: #23345f;
+        --blue-soft-strong: #263755;
+        --blue-text: #d4dcff;
+        --line: #46546a;
+        --input-line: #59677b;
+        --selected-line: #8aa3ff;
+        --muted: #b2bdcc;
+        --past: #8492a6;
+        --soft: #2a3544;
+        --soft-strong: #344154;
+        --hover: #30405a;
+        --focus: rgba(138, 163, 255, .5);
         --green: #67d79b;
         --green-line: #285f43;
         --green-soft: #142a20;
@@ -75,9 +83,9 @@
         --red-soft: #331d20;
         --red-soft-strong: #391c20;
         --red-text: #ffaaa2;
-        --shadow: rgba(0, 0, 0, .24);
-        --shadow-strong: rgba(0, 0, 0, .4);
-        --submit-bar: rgba(15, 17, 23, .96);
+        --shadow: rgba(0, 0, 0, .34);
+        --shadow-strong: rgba(0, 0, 0, .52);
+        --submit-bar: rgba(10, 13, 19, .96);
       }
       * { box-sizing: border-box; }
       body { margin: 0; min-width: 320px; min-height: 100vh; background: var(--page); }
@@ -99,13 +107,13 @@
       p { color: var(--muted); line-height: 1.55; }
       .field { display: grid; gap: 7px; margin-top: 18px; }
       .field label, legend { font-size: 14px; font-weight: 750; }
-      .field input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--input-line); border-radius: 11px; color: var(--ink); background: var(--surface); }
+      .field input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--input-line); border-radius: 11px; color: var(--ink); background: var(--field); }
       .password-input { position: relative; }
       .password-input input { padding-right: 48px; }
       .password-toggle { position: absolute; top: 50%; right: 5px; display: grid; width: 38px; height: 38px; padding: 0; border: 0; place-items: center; transform: translateY(-50%); color: var(--muted); background: transparent; }
       .password-toggle svg { width: 21px; height: 21px; }
       .password-toggle[aria-pressed="false"] .password-slash { display: none; }
-      .field input:focus, button:focus-visible, summary:focus-visible { outline: 3px solid rgba(51, 92, 255, .2); outline-offset: 2px; }
+      .field input:focus, button:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       .primary, .secondary, .ghost, .danger { min-height: 44px; padding: 0 16px; border: 0; border-radius: 11px; font-weight: 750; }
       .primary { color: white; background: var(--blue); }
       .primary:hover { background: var(--blue-dark); }
@@ -122,7 +130,7 @@
       .club-link svg { width: 19px; height: 19px; color: #c13584; flex: none; }
       .club-link:hover { color: var(--ink); }
       .external-arrow { margin-left: 2px; font-size: 13px; }
-      .theme-toggle { display: grid; width: 42px; height: 42px; padding: 0; border: 1px solid var(--line); border-radius: 11px; place-items: center; color: var(--text); background: var(--surface); font-size: 20px; line-height: 1; flex: none; }
+      .theme-toggle { display: grid; width: 42px; height: 42px; padding: 0; border: 1px solid var(--line); border-radius: 11px; place-items: center; color: var(--text); background: var(--soft); font-size: 20px; line-height: 1; flex: none; }
       .theme-toggle:hover { background: var(--soft); }
       .app-shell { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 26px 0 60px; }
       .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
@@ -131,7 +139,7 @@
       .app-header .club-mark { width: 54px; height: 36px; }
       .app-header .brand small { margin-left: 4px; color: var(--brand); font-size: 10px; letter-spacing: 0; }
       .account-menu { position: relative; }
-      .account-menu summary { padding: 10px 13px; border-radius: 10px; color: var(--muted); background: var(--surface); font-weight: 700; list-style: none; cursor: pointer; }
+      .account-menu summary { padding: 10px 13px; border-radius: 10px; color: var(--text); background: var(--soft); font-weight: 700; list-style: none; cursor: pointer; }
       .account-menu summary::-webkit-details-marker { display: none; }
       .account-popover { position: absolute; z-index: 20; top: 48px; right: 0; display: grid; width: 190px; gap: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 12px 30px var(--shadow-strong); }
       .account-popover button { width: 100%; }
@@ -170,11 +178,12 @@
       .weekday-row span:first-child { color: var(--red); }
       .weekday-row span:last-child { color: var(--saturday); }
       .day { position: relative; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 12px; color: var(--text); background: transparent; font-weight: 650; }
+      .day:disabled { opacity: 1; }
       .day:hover:not(:disabled) { background: var(--hover); }
-      .day.is-today { border-color: #8ea5ff; }
+      .day.is-today { border-color: var(--selected-line); }
       .day.is-selected { color: white; background: var(--blue); }
       .day.is-selected:disabled { opacity: 1; }
-      .day.is-past { color: color-mix(in srgb, var(--muted) 60%, transparent); }
+      .day.is-past, .day.is-unavailable { color: var(--past); }
       .day.is-holiday:not(.is-selected) { color: var(--red); }
       .day.is-holiday::before { position: absolute; top: 4px; right: 5px; content: "휴"; color: var(--red); font-size: 9px; font-weight: 900; }
       .day.is-holiday.is-selected::before { color: white; }
@@ -201,12 +210,12 @@
       .mode-tabs label { position: relative; }
       .mode-tabs input { position: absolute; opacity: 0; }
       .mode-tabs span { display: grid; min-height: 42px; place-items: center; border-radius: 9px; color: var(--muted); font-size: 14px; font-weight: 750; cursor: pointer; }
-      .mode-tabs input:checked + span { color: var(--ink); background: var(--surface); box-shadow: 0 2px 8px var(--shadow); }
+      .mode-tabs input:checked + span { color: var(--ink); background: var(--field); box-shadow: 0 2px 8px var(--shadow); }
       .control-copy { margin-bottom: 18px; font-size: 13px; }
       .choice-list { display: grid; gap: 8px; }
       .choice { position: relative; display: flex; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
-      .choice:has(input:checked) { border-color: #7891f8; background: var(--blue-soft); }
-      .choice:has(input:focus-visible) { outline: 3px solid rgba(51, 92, 255, .2); outline-offset: 2px; }
+      .choice:has(input:checked) { border-color: var(--selected-line); background: var(--blue-soft); }
+      .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
       .choice input { margin-top: 2px; accent-color: var(--blue); }
       .choice strong, .choice small { display: block; }
       .choice small { margin-top: 3px; color: var(--muted); }
@@ -250,8 +259,8 @@
         .weekday-row, #calendar-grid { gap: 3px; }
       }
       @media (prefers-color-scheme: dark) {
-        :root:not([data-theme="light"]) { color-scheme: dark; background: #0f1117; }
-        :root:not([data-theme="light"]) body { background: #0f1117; }
+        :root:not([data-theme="light"]) { color-scheme: dark; background: #0a0d13; }
+        :root:not([data-theme="light"]) body { background: #0a0d13; }
       }
     </style>
   </head>
