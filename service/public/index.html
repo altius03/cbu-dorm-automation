@@ -99,14 +99,14 @@
       .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; }
       .club-mark { width: 72px; height: 48px; object-fit: contain; flex: none; }
       .login-brand strong { font-size: 32px; font-weight: 600; letter-spacing: -.04em; }
-      .login-brand small { margin-left: 5px; color: var(--brand); font-size: 16px; font-weight: 700; }
-      .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font-size: 13px; font-weight: 800; letter-spacing: .04em; }
+      .login-brand small { margin-left: 5px; color: var(--brand); font-size: 16px; font-weight: 600; }
+      .brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: 20px; color: var(--blue); font-size: 13px; font-weight: 600; letter-spacing: .04em; }
       h1, h2, p { margin-top: 0; }
-      h1 { margin-bottom: 9px; font-size: clamp(25px, 5vw, 32px); letter-spacing: -.04em; }
-      h2 { margin-bottom: 4px; font-size: 18px; letter-spacing: -.02em; }
+      h1 { margin-bottom: 9px; font-size: clamp(25px, 5vw, 32px); font-weight: 600; letter-spacing: -.04em; }
+      h2 { margin-bottom: 4px; font-size: 21px; font-weight: 600; letter-spacing: -.02em; }
       p { color: var(--muted); line-height: 1.55; }
       .field { display: grid; gap: 7px; margin-top: 18px; }
-      .field label, legend { font-size: 14px; font-weight: 750; }
+      .field label, legend { font-size: 14px; font-weight: 600; }
       .field input { width: 100%; min-height: 48px; padding: 0 14px; border: 1px solid var(--input-line); border-radius: 11px; color: var(--ink); background: var(--field); }
       .password-input { position: relative; }
       .password-input input { padding-right: 48px; }
@@ -114,7 +114,7 @@
       .password-toggle svg { width: 21px; height: 21px; }
       .password-toggle[aria-pressed="false"] .password-slash { display: none; }
       .field input:focus, button:focus-visible, summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-      .primary, .secondary, .ghost, .danger { min-height: 44px; padding: 0 16px; border: 0; border-radius: 11px; font-weight: 750; }
+      .primary, .secondary, .ghost, .danger { min-height: 44px; padding: 0 16px; border: 0; border-radius: 11px; font-weight: 600; }
       .primary { color: white; background: var(--blue); }
       .primary:hover { background: var(--blue-dark); }
       .secondary { color: var(--text); background: var(--soft-strong); }
@@ -125,7 +125,7 @@
       #login-status:empty { display: none; }
       #login-status[data-kind="error"] { color: var(--red); }
       .login-footer { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
-      .club-link { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding: 10px 2px; color: var(--text); font-size: 12px; font-weight: 700; text-decoration: none; }
+      .club-link { display: flex; align-items: center; gap: 9px; margin-top: 16px; padding: 10px 2px; color: var(--text); font-size: 12px; font-weight: 600; text-decoration: none; }
       .login-footer .club-link { min-width: 0; margin: 0; flex: 1; }
       .club-link svg { width: 19px; height: 19px; color: #c13584; flex: none; }
       .club-link:hover { color: var(--ink); }
@@ -135,11 +135,12 @@
       .app-shell { width: min(1080px, calc(100% - 32px)); margin: 0 auto; padding: 26px 0 60px; }
       .app-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
       .header-actions { display: flex; align-items: center; gap: 8px; }
-      .app-header .brand { margin: 0; color: var(--ink); font-size: 18px; letter-spacing: -.02em; }
-      .app-header .club-mark { width: 54px; height: 36px; }
-      .app-header .brand small { margin-left: 4px; color: var(--brand); font-size: 10px; letter-spacing: 0; }
+      .app-header .brand { margin: 0; color: var(--ink); font-size: 22px; letter-spacing: -.02em; }
+      .app-header .brand span { white-space: nowrap; }
+      .app-header .club-mark { width: 72px; height: 48px; }
+      .app-header .brand small { margin-left: 4px; color: var(--brand); font-size: 13px; letter-spacing: 0; }
       .account-menu { position: relative; }
-      .account-menu summary { padding: 10px 13px; border-radius: 10px; color: var(--text); background: var(--soft); font-weight: 700; list-style: none; cursor: pointer; }
+      .account-menu summary { padding: 10px 13px; border-radius: 10px; color: var(--text); background: var(--soft); font-weight: 600; white-space: nowrap; list-style: none; cursor: pointer; }
       .account-menu summary::-webkit-details-marker { display: none; }
       .account-popover { position: absolute; z-index: 20; top: 48px; right: 0; display: grid; width: 190px; gap: 6px; padding: 9px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); box-shadow: 0 12px 30px var(--shadow-strong); }
       .account-popover button { width: 100%; }
@@ -150,13 +151,13 @@
       #service-dialog { width: min(400px, calc(100% - 32px)); padding: 0; border: 0; border-radius: 18px; color: var(--ink); background: var(--surface); box-shadow: 0 24px 64px var(--shadow-strong); }
       #service-dialog::backdrop { background: rgba(24, 34, 48, .45); backdrop-filter: blur(2px); }
       .dialog-card { margin: 0; padding: 26px; background: var(--surface); }
-      .dialog-mark { display: grid; width: 40px; height: 40px; margin-bottom: 16px; place-items: center; border-radius: 50%; font-size: 22px; font-weight: 800; }
+      .dialog-mark { display: grid; width: 40px; height: 40px; margin-bottom: 16px; place-items: center; border-radius: 50%; font-size: 22px; font-weight: 600; }
       #service-dialog[data-kind="success"] .dialog-mark { color: var(--green); background: var(--green-soft); }
       #service-dialog[data-kind="warning"] .dialog-mark, #service-dialog[data-kind="danger"] .dialog-mark { color: var(--red); background: var(--red-soft-strong); }
       .dialog-card h2 { margin: 0; font-size: 21px; }
       .dialog-message { margin: 9px 0 0; color: var(--muted); white-space: pre-line; }
       .dialog-support { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding: 9px 10px; border-radius: 10px; color: var(--muted); background: var(--soft); font-size: 12px; }
-      .dialog-support code { color: var(--ink); font-weight: 800; }
+      .dialog-support code { color: var(--ink); font-weight: 600; }
       .dialog-support button { min-height: 32px; padding: 0 8px; }
       .dialog-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 24px; }
       .dialog-actions:has(#dialog-cancel[hidden]) { grid-template-columns: 1fr; }
@@ -166,26 +167,29 @@
       .workspace { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .8fr); gap: 18px; align-items: start; }
       .calendar-column { display: grid; gap: 18px; align-content: start; }
       .panel { padding: 22px; }
-      .club-panel { padding: 18px 20px; }
-      .club-panel .club-link { margin: 0; padding: 0; font-size: 13px; }
+      .club-panel { padding: 0 22px; }
+      .club-panel .club-link { min-height: 44px; margin: 0; padding: 0; gap: 10px; font-size: 17px; }
+      .club-panel .club-link svg { width: 24px; height: 24px; }
       .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-      .panel-heading p { margin: 0; font-size: 13px; }
       .calendar-toolbar { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 8px; }
       .calendar-toolbar button { width: 44px; height: 44px; border: 0; border-radius: 11px; color: var(--text); background: var(--soft); font-size: 22px; }
       #month-title { margin: 0; text-align: center; font-size: 20px; }
       .weekday-row, #calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-      .weekday-row { margin: 18px 0 8px; color: var(--muted); font-size: 12px; font-weight: 700; text-align: center; }
+      .weekday-row { margin: 18px 0 8px; color: var(--muted); font-size: 12px; font-weight: 500; text-align: center; }
       .weekday-row span:first-child { color: var(--red); }
       .weekday-row span:last-child { color: var(--saturday); }
-      .day { position: relative; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 12px; color: var(--text); background: transparent; font-weight: 650; }
+      .day { position: relative; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 12px; color: var(--text); background: transparent; font-weight: 500; }
       .day:disabled { opacity: 1; }
       .day:hover:not(:disabled) { background: var(--hover); }
-      .day.is-today { border-color: var(--selected-line); }
+      .day.is-today { display: flex; flex-direction: column; align-items: center; justify-content: center; border-color: var(--selected-line); line-height: 1.1; }
+      .day .today-label { margin-top: 6px; color: var(--blue-text); font-size: 16px; font-weight: 500; }
+      .day.is-today.is-selected .today-label { color: white; }
+      .day.is-today::after { right: auto; left: 3px; }
       .day.is-selected { color: white; background: var(--blue); }
       .day.is-selected:disabled { opacity: 1; }
       .day.is-past, .day.is-unavailable { color: var(--past); }
       .day.is-holiday:not(.is-selected) { color: var(--red); }
-      .day.is-holiday::before { position: absolute; top: 4px; right: 5px; content: "휴"; color: var(--red); font-size: 9px; font-weight: 900; }
+      .day.is-holiday::before { position: absolute; top: 4px; right: 5px; content: "휴"; color: var(--red); font-size: 16px; font-weight: 500; }
       .day.is-holiday.is-selected::before { color: white; }
       .day.has-application { box-shadow: inset 0 0 0 2px #4f78ff; }
       .day.status-saved { box-shadow: inset 0 0 0 2px #1b9a5a; background: var(--green-soft); color: var(--green-text); }
@@ -194,7 +198,7 @@
       .day.status-unknown { box-shadow: inset 0 0 0 2px #e09a29; background: var(--amber-soft); color: var(--amber); }
       .day.is-selected.status-saved, .day.is-selected.status-exists, .day.is-selected.status-overlap,
       .day.is-selected.status-not_attempted, .day.is-selected.status-unknown { color: white; background: var(--blue); }
-      .day::after { position: absolute; right: 6px; bottom: 4px; content: attr(data-mark); font-size: 11px; font-weight: 900; }
+      .day::after { position: absolute; right: 6px; bottom: 4px; content: attr(data-mark); font-size: 11px; font-weight: 600; }
       .calendar-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 16px; color: var(--muted); font-size: 12px; }
       .calendar-legend span { display: inline-flex; align-items: center; gap: 5px; }
       .dot { width: 10px; height: 10px; border-radius: 50%; background: #98a2b3; }
@@ -209,7 +213,7 @@
       .mode-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-bottom: 22px; padding: 4px; border-radius: 12px; background: var(--soft-strong); }
       .mode-tabs label { position: relative; }
       .mode-tabs input { position: absolute; opacity: 0; }
-      .mode-tabs span { display: grid; min-height: 42px; place-items: center; border-radius: 9px; color: var(--muted); font-size: 14px; font-weight: 750; cursor: pointer; }
+      .mode-tabs span { display: grid; min-height: 42px; place-items: center; border-radius: 9px; color: var(--muted); font-size: 14px; font-weight: 600; cursor: pointer; }
       .mode-tabs input:checked + span { color: var(--ink); background: var(--field); box-shadow: 0 2px 8px var(--shadow); }
       .control-copy { margin-bottom: 18px; font-size: 13px; }
       .choice-list { display: grid; gap: 8px; }
@@ -217,37 +221,50 @@
       .choice:has(input:checked) { border-color: var(--selected-line); background: var(--blue-soft); }
       .choice:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
       .choice input { margin-top: 2px; accent-color: var(--blue); }
+      .pattern-options .choice input { appearance: none; width: 16px; height: 16px; flex: none; border: 2px solid var(--input-line); border-radius: 50%; background: transparent; }
+      .pattern-options .choice input:checked { border-color: var(--blue); background: radial-gradient(circle, var(--blue) 0 4px, transparent 4px); }
+      .pattern-options .choice small { display: none; }
       .choice strong, .choice small { display: block; }
+      .choice strong { font-weight: 500; }
       .choice small { margin-top: 3px; color: var(--muted); }
-      .option-help { margin: 10px 2px 0; font-size: 13px; }
       .options-section + .options-section { margin-top: 20px; }
       #custom-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; margin-top: 10px; }
       #custom-weekdays label { position: relative; }
       #custom-weekdays input { position: absolute; opacity: 0; }
-      #custom-weekdays span { display: grid; min-height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; }
+      #custom-weekdays span { display: grid; min-height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); font-size: 12px; font-weight: 500; cursor: pointer; }
       #custom-weekdays input:checked + span { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
-      .selection-summary { margin: 20px 0 12px; padding: 13px; border-radius: 12px; color: var(--text); background: var(--soft); font-size: 14px; font-weight: 700; }
+      .selection-summary { margin: 20px 0 12px; padding: 13px; border-radius: 12px; color: var(--text); background: var(--soft); font-size: 14px; font-weight: 500; }
       #submit-selection { width: 100%; }
       #cancel-job { width: 100%; margin-top: 9px; }
       #refresh-data { white-space: nowrap; }
       .panel-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
       @media (max-width: 760px) {
         .app-shell { width: 100%; padding: 18px 14px 110px; }
+        .app-header .brand { font-size: 20px; }
+        .app-header .club-mark { width: 66px; height: 44px; }
+        .app-header .brand small { font-size: 12px; }
         .workspace { grid-template-columns: 1fr; }
         .calendar-column { display: contents; }
         .panel { padding: 18px 14px; border-radius: 16px; }
         .control-panel { order: 1; }
         .calendar-panel { order: 2; }
-        .club-panel { order: 3; }
+        .club-panel { order: 3; padding: 0 14px; }
+        .club-panel .club-link { font-size: 15px; }
+        .club-panel .club-link svg { width: 21px; height: 21px; }
         .pattern-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .pattern-options .featured-pattern { grid-column: 1 / -1; }
         .pattern-options .choice, .range-options .choice { min-height: 44px; align-items: center; justify-content: center; gap: 0; padding: 0 8px; text-align: center; }
-        .pattern-options .choice input, .range-options .choice input { position: absolute; opacity: 0; }
-        .pattern-options .choice small, .range-options .choice small { display: none; }
+        .pattern-options .choice { min-height: 48px; justify-content: flex-start; gap: 8px; padding: 8px; text-align: left; }
+        .pattern-options .choice input { margin: 0; }
+        .range-options .choice input { position: absolute; opacity: 0; }
+        .range-options .choice small { display: none; }
+        .pattern-options .featured-pattern { min-height: 56px; padding: 8px 12px; }
         .range-options { grid-template-columns: repeat(3, 1fr); gap: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 11px; }
         .range-options .choice { border: 0; border-right: 1px solid var(--line); border-radius: 0; }
         .range-options .choice:last-child { border-right: 0; }
         .range-options .choice:has(input:checked) { color: white; background: var(--blue); }
         .day { min-height: 42px; border-radius: 10px; }
+        .day .today-label, .day.is-holiday::before { font-size: 10px; }
         .submit-bar { position: fixed; z-index: 15; right: 0; bottom: 0; left: 0; padding: 10px 14px max(10px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--submit-bar); backdrop-filter: blur(12px); }
         #submit-selection { max-width: 520px; margin: 0 auto; display: block; }
         #cancel-job { max-width: 520px; margin: 8px auto 0; display: block; }
@@ -257,6 +274,13 @@
         .login-card { min-height: 100vh; padding: 42px 20px; border: 0; border-radius: 0; box-shadow: none; }
         .day { min-height: 38px; font-size: 13px; }
         .weekday-row, #calendar-grid { gap: 3px; }
+      }
+      @media (max-width: 360px) {
+        .app-header .brand { gap: 6px; font-size: 18px; }
+        .app-header .club-mark { width: 58px; height: 39px; }
+        .app-header .brand small { font-size: 10px; }
+        .header-actions { gap: 6px; }
+        .account-menu summary { padding: 10px; }
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) { color-scheme: dark; background: #08090b; }
@@ -329,10 +353,7 @@
           <div class="calendar-column">
             <section class="panel calendar-panel" aria-labelledby="calendar-heading">
             <div class="panel-heading">
-              <div>
-                <h2 id="calendar-heading">날짜 선택</h2>
-                <p>31일 이내 선택 가능</p>
-              </div>
+              <h2 id="calendar-heading">날짜 선택</h2>
               <div class="panel-actions">
                 <button id="reconcile-job" class="secondary" type="button" hidden>결과 다시 확인</button>
                 <button id="refresh-data" class="ghost" type="button">새로고침</button>
@@ -359,7 +380,7 @@
             <p id="holiday-meta" hidden></p>
             </section>
 
-            <aside class="panel club-panel" aria-label="CBU 인스타그램">
+            <aside class="club-panel" aria-label="CBU 인스타그램">
               <a class="club-link" href="https://www.instagram.com/tukorea_cbu/" target="_blank" rel="noopener noreferrer" aria-label="한국공학대 개발동아리 CBU 인스타그램">
                 <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="3" y="3" width="18" height="18" rx="5" />
@@ -372,7 +393,7 @@
           </div>
 
           <section class="panel control-panel" aria-labelledby="request-heading">
-              <h2 id="request-heading">어떻게 선택할까요?</h2>
+              <h2 id="request-heading">외박 날짜 선택</h2>
               <form id="request-form">
               <div class="mode-tabs" role="group" aria-label="날짜 선택 방식">
                 <label><input id="mode-auto" type="radio" name="mode" value="auto" checked /><span>자동 선택</span></label>
@@ -385,14 +406,14 @@
 
               <section id="auto-controls">
                 <fieldset class="options-section">
-                  <legend>어떤 날을</legend>
+                  <legend>신청할 날</legend>
                   <div class="choice-list pattern-options">
-                    <label class="choice"><input type="radio" name="pattern" value="daily" data-help="신청 가능한 날짜를 매일 선택합니다." /><span><strong>매일</strong><small>최대 7박 8일씩 묶어서</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekdays" data-help="월요일부터 금요일까지 선택합니다." /><span><strong>평일</strong><small>월요일부터 금요일까지</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="weekends" data-help="금요일부터 일요일까지 선택합니다." checked /><span><strong>주말</strong><small>금요일부터 일요일까지 묶어서</small></span></label>
-                    <label class="choice"><input type="radio" name="pattern" value="custom" data-help="선택한 요일을 반복합니다." /><span><strong>요일 지정</strong><small>원하는 요일만 반복</small></span></label>
+                    <label class="choice"><input type="checkbox" name="pattern" value="daily" /><span><strong>매일</strong><small>기간 내 모든 날</small></span></label>
+                    <label class="choice"><input type="checkbox" name="pattern" value="weekdays" /><span><strong>평일</strong><small>공휴일 제외 월~금</small></span></label>
+                    <label class="choice"><input type="checkbox" name="pattern" value="custom" /><span><strong>요일 지정</strong><small>원하는 요일 반복</small></span></label>
+                    <label class="choice"><input type="checkbox" name="pattern" value="holidays" aria-label="이번 달 공휴일과 전날" /><span><strong>공휴일</strong><small>공휴일과 전날</small></span></label>
+                    <label class="choice featured-pattern"><input type="checkbox" name="pattern" value="weekends" aria-label="주말, 금요일부터 일요일까지" /><span><strong>주말</strong><small>금~일 반복</small></span></label>
                   </div>
-                  <p id="pattern-help" class="option-help" aria-live="polite">금요일부터 일요일까지 선택합니다.</p>
                   <div id="custom-weekdays" hidden>
                     <label><input type="checkbox" name="weekday" value="0" /><span>일</span></label>
                     <label><input type="checkbox" name="weekday" value="1" /><span>월</span></label>
@@ -404,17 +425,17 @@
                   </div>
                 </fieldset>
 
-                <fieldset class="options-section">
-                  <legend>기간</legend>
+                <fieldset id="range-section" class="options-section">
+                  <legend>반복 기간</legend>
                   <div id="horizon-options" class="choice-list range-options">
                     <label class="choice"><input type="radio" name="range" value="7" /><span><strong>1주</strong><small>오늘 포함 7일</small></span></label>
                     <label class="choice"><input type="radio" name="range" value="14" /><span><strong>2주</strong><small>오늘 포함 14일</small></span></label>
-                    <label class="choice"><input type="radio" name="range" value="31" checked /><span><strong>31일</strong><small>한 달 단위 최대 기간</small></span></label>
+                    <label class="choice"><input type="radio" name="range" value="31" /><span><strong>1달</strong><small>한 달 단위 최대 기간</small></span></label>
                   </div>
                 </fieldset>
               </section>
 
-              <div id="selection-summary" class="selection-summary">선택한 날짜가 없습니다.</div>
+              <div id="selection-summary" class="selection-summary">아직 선택한 날짜가 없습니다.</div>
               <div class="submit-bar">
                 <button id="submit-selection" class="primary" type="submit" disabled>날짜를 선택해 주세요</button>
                 <button id="cancel-job" class="danger" type="button" hidden>남은 신청 중단</button>

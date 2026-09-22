@@ -16,8 +16,8 @@ const manualMode = document.querySelector("#mode-manual");
 const autoMode = document.querySelector("#mode-auto");
 const manualControls = document.querySelector("#manual-controls");
 const autoControls = document.querySelector("#auto-controls");
+const rangeSection = document.querySelector("#range-section");
 const customWeekdays = document.querySelector("#custom-weekdays");
-const patternHelp = document.querySelector("#pattern-help");
 const selectionSummary = document.querySelector("#selection-summary");
 const submitButton = document.querySelector("#submit-selection");
 const cancelButton = document.querySelector("#cancel-job");
@@ -207,6 +207,10 @@ function checkedValue(name) {
   return document.querySelector(`input[name="${name}"]:checked`)?.value || "";
 }
 
+function selectedPatterns() {
+  return new Set([...document.querySelectorAll('input[name="pattern"]:checked')].map(input => input.value));
+}
+
 function selectedWeekdays() {
   return [...document.querySelectorAll('input[name="weekday"]:checked')].map(input => Number(input.value));
 }
@@ -255,17 +259,30 @@ function activeDates() {
   if (manualMode.checked) return [...state.manualDates]
     .filter(date => state.today <= date && date <= maxSelectableDate() && !hasApplication(date))
     .sort();
+  const patterns = selectedPatterns();
+  const needsRange = ["daily", "weekdays", "weekends", "custom"].some(pattern => patterns.has(pattern));
   const days = Number(checkedValue("range"));
-  if (![7, 14, state.maxSelectionDays].includes(days)) return [];
-  const pattern = checkedValue("pattern");
-  const weekdays = new Set(selectedWeekdays());
-  return datesBetween(state.today, addDays(state.today, days - 1)).filter(value => {
-    const day = dateAt(value).getUTCDay();
-    if (pattern === "daily") return true;
-    if (pattern === "weekdays") return day >= 1 && day <= 5;
-    if (pattern === "weekends") return day === 0 || day === 5 || day === 6;
-    return pattern === "custom" && weekdays.has(day);
-  }).filter(date => !hasApplication(date));
+  if (patterns.has("custom") && !selectedWeekdays().length) return [];
+  if (needsRange && ![7, 14, state.maxSelectionDays].includes(days)) return [];
+  const dates = new Set();
+  if (patterns.has("holidays")) {
+    for (const holiday of state.holidays) {
+      if (!holiday.date.startsWith(state.today.slice(0, 7))) continue;
+      dates.add(holiday.date);
+      dates.add(addDays(holiday.date, -1));
+    }
+  }
+  if (needsRange) {
+    const weekdays = new Set(selectedWeekdays());
+    for (const value of datesBetween(state.today, addDays(state.today, days - 1))) {
+      const day = dateAt(value).getUTCDay();
+      if (patterns.has("daily") ||
+        (patterns.has("weekdays") && day >= 1 && day <= 5 && !holidayFor(value)) ||
+        (patterns.has("weekends") && (day === 0 || day === 5 || day === 6)) ||
+        (patterns.has("custom") && weekdays.has(day))) dates.add(value);
+    }
+  }
+  return [...dates].filter(date => state.today <= date && date <= maxSelectableDate() && !hasApplication(date)).sort();
 }
 
 function maxSelectableDate() {
@@ -327,7 +344,13 @@ function renderCalendar() {
     button.className = "day";
     button.textContent = String(day);
     button.dataset.date = iso;
-    if (iso === state.today) button.classList.add("is-today");
+    if (iso === state.today) {
+      button.classList.add("is-today");
+      const todayLabel = document.createElement("span");
+      todayLabel.className = "today-label";
+      todayLabel.textContent = "오늘";
+      button.append(todayLabel);
+    }
     if (iso < state.today) button.classList.add("is-past");
     if (iso > maxSelectableDate()) button.classList.add("is-unavailable");
     if (selected.has(iso)) button.classList.add("is-selected");
@@ -336,6 +359,7 @@ function renderCalendar() {
     if (mark) button.classList.add(`status-${mark}`);
     button.dataset.mark = mark === "saved" ? "✓" : mark === "unknown" ? "!" : mark ? "–" : application ? "●" : "";
     const labels = [`${state.viewMonth + 1}월 ${day}일`];
+    if (iso === state.today) labels.push("오늘");
     if (selected.has(iso)) labels.push("선택됨");
     if (application) labels.push("이미 신청한 날");
     if (holiday) labels.push(holiday.name);
@@ -356,12 +380,14 @@ function renderCalendar() {
 function updateSelection() {
   manualControls.hidden = !manualMode.checked;
   autoControls.hidden = manualMode.checked;
-  customWeekdays.hidden = checkedValue("pattern") !== "custom";
-  patternHelp.textContent = document.querySelector('input[name="pattern"]:checked')?.dataset.help || "";
+  const patterns = selectedPatterns();
+  const needsRange = ["daily", "weekdays", "weekends", "custom"].some(pattern => patterns.has(pattern));
+  rangeSection.hidden = patterns.size === 1 && patterns.has("holidays");
+  customWeekdays.hidden = !patterns.has("custom");
   const dates = activeDates();
   selectionSummary.textContent = dates.length
     ? dates.length === 1 ? `${formatDate(dates[0])} 1일 선택` : `${formatDate(dates[0])}~${formatDate(dates.at(-1))} 중 ${dates.length}일 선택`
-    : manualMode.checked ? "달력에서 날짜를 선택해 주세요." : "신청할 날짜가 없습니다.";
+    : manualMode.checked ? "달력에서 날짜를 선택해 주세요." : !patterns.size ? "아직 선택한 날짜가 없습니다." : patterns.has("custom") && !selectedWeekdays().length ? "요일을 선택해 주세요." : needsRange && !checkedValue("range") ? "반복 기간을 선택해 주세요." : patterns.has("holidays") && patterns.size === 1 ? "이번 달 신청 가능한 공휴일과 전날이 없습니다." : "신청할 날짜가 없습니다.";
   submitButton.textContent = applicationSubmitting ? "신청 중…" : dates.length ? `선택한 ${dates.length}일 신청하기` : "날짜를 선택해 주세요";
   submitButton.disabled = !dates.length || actionBusy || batchRunning || unresolvedJob;
   renderCalendar();
