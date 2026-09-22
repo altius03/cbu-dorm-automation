@@ -180,7 +180,8 @@
       .weekday-row span:last-child { color: var(--saturday); }
       .day { position: relative; min-width: 0; aspect-ratio: 1; border: 1px solid transparent; border-radius: 12px; color: var(--text); background: transparent; font-weight: 500; }
       .day:disabled { opacity: 1; }
-      .day:hover:not(:disabled) { background: var(--hover); }
+      .day:hover:not(:disabled):not(.is-selected) { background: var(--hover); }
+      .day.is-selected:hover:not(:disabled) { opacity: .9; }
       .day.is-today { display: flex; flex-direction: column; align-items: center; justify-content: center; border-color: var(--selected-line); line-height: 1.1; }
       .day .today-label { margin-top: 6px; color: var(--blue-text); font-size: 16px; font-weight: 500; }
       .day.is-today.is-selected .today-label { color: white; }
@@ -281,6 +282,9 @@
         .app-header .brand small { font-size: 10px; }
         .header-actions { gap: 6px; }
         .account-menu summary { padding: 10px; }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .day { transition: background-color .16s ease, opacity .16s ease; }
       }
       @media (prefers-color-scheme: dark) {
         :root:not([data-theme="light"]) { color-scheme: dark; background: #08090b; }
