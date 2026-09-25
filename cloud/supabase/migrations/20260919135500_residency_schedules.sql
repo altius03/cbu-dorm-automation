@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS overnight_private.residency_schedules (
   CHECK (starts_on <= semester_end AND semester_end <= six_month_end AND six_month_end <= twelve_month_end)
 );
 
+ALTER TABLE overnight_private.residency_schedules NO FORCE ROW LEVEL SECURITY;
 INSERT INTO overnight_private.residency_schedules
   (term, starts_on, through_on, semester_end, six_month_end, twelve_month_end, source, updated_at)
 VALUES

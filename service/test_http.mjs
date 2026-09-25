@@ -9,14 +9,19 @@ import { join } from "node:path";
 import { createApplication } from "./server.mjs";
 import { CredentialStore } from "./store.mjs";
 import { PortalError } from "./portal.mjs";
+import { sessionProof } from "./crypto.mjs";
 
 // Real loopback sockets, disposable credentials, and a stub portal only.
 const directory = mkdtempSync(join(tmpdir(), "overnight-http-test-"));
 const store = new CredentialStore(directory);
+let healthCalls = 0;
+let healthy = true;
+store.health = async () => { healthCalls++; if (!healthy) throw new Error("fixture database unavailable"); return true; };
 const ownerCredentials = { studentId: "httpowner1", password: "fixture-password" };
 const otherCredentials = { studentId: "httpother2", password: "fixture-password" };
 const owner = store.create(ownerCredentials);
 const other = store.create(otherCredentials);
+assert.equal(store.find(owner.token, { now: Date.now() + 28_800_001 }), null);
 const publicOrigin = "https://overnight.example";
 const setupToken = "fixture-http-setup-token-".repeat(3);
 const logs = [];
@@ -65,7 +70,7 @@ function call(path, { method = "GET", token, body, raw, headers = {} } = {}) {
       host: "127.0.0.1", port: server.address().port, path, method,
       headers: {
         ...(payload === undefined ? {} : { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(payload) }),
-        ...(token ? { Cookie: `overnight_session=${token}` } : {}), ...headers,
+        ...(token ? { Cookie: `overnight_session=${token}`, "X-Session-Proof": sessionProof(store.key, token) } : {}), ...headers,
       },
     }, response => {
       const chunks = [];
@@ -94,6 +99,18 @@ try {
   assert.equal(health.headers["x-content-type-options"], "nosniff");
   assert.match(health.headers["content-security-policy"], /frame-ancestors 'none'/);
   assert.ok(health.headers["x-request-id"]);
+  assert.equal((await call("/api/health")).status, 200);
+  assert.equal(healthCalls, 1);
+  clock = new Date(clock.getTime() + 30_001);
+  healthy = false;
+  assert.equal((await call("/api/health")).status, 500);
+  assert.equal((await call("/api/health")).status, 500);
+  assert.equal(healthCalls, 2);
+  clock = new Date(clock.getTime() + 30_001);
+  healthy = true;
+  assert.equal((await call("/api/health")).status, 200);
+  assert.equal(healthCalls, 3);
+  clock = new Date("2026-09-19T03:00:00Z");
   const html = await call("/");
   assert.equal(html.status, 200);
   assert.equal((await call("/", { headers: { "Sec-Fetch-Site": "cross-site" } })).status, 200);
@@ -132,14 +149,25 @@ try {
   assert.equal(connected.body.maxSelectionDays, 31);
   assert.equal("horizons" in connected.body, false);
   const cookie = connected.headers["set-cookie"]?.[0];
+  const issuedToken = cookie.split(";")[0].slice("overnight_session=".length);
+  assert.equal(connected.body.sessionProof, sessionProof(store.key, issuedToken));
   assert.match(cookie, /; HttpOnly/);
   assert.match(cookie, /; SameSite=Strict/);
   assert.match(cookie, /; Secure/);
+  assert.match(cookie, /; Max-Age=28800/);
   const session = await call("/api/session", { headers: { Host: "overnight.example", Origin: publicOrigin, Cookie: cookie.split(";")[0] } });
   assert.equal(session.body.connected, false);
+  assert.equal("sessionProof" in session.body, false);
   assert.equal("credentials" in session.body, false);
   assert.equal(session.body.maxSelectionDays, 31);
   assert.equal("horizons" in session.body, false);
+  assert.equal((await call("/api/batch/history", { token: issuedToken, headers: { "X-Session-Proof": "" } })).status, 401);
+  assert.equal((await call("/api/batch/history", { headers: { "X-Session-Proof": connected.body.sessionProof } })).status, 401);
+  assert.equal((await call("/api/batch/history", { token: issuedToken, headers: { "X-Session-Proof": "x".repeat(43) } })).status, 401);
+  assert.equal((await call("/api/batch/history", { token: owner.token, headers: { "X-Session-Proof": connected.body.sessionProof } })).status, 401);
+  assert.equal((await call("/api/account", { method: "DELETE", token: issuedToken, headers: { "X-Session-Proof": "" } })).status, 401);
+  assert.ok(store.find(issuedToken));
+  assert.equal((await call("/api/batch/history", { token: issuedToken })).status, 200);
   assert.deepEqual((await call("/api/applications", { method: "POST", token: owner.token, body: ownerCredentials })).body.applications, [
     { start: "2026-09-18", end: "2026-09-20", active: true },
   ]);
@@ -158,6 +186,8 @@ try {
   await new Promise(resolve => setImmediate(resolve));
   assert.equal((await call(`/api/batch/job?id=${jobId}`, { token: other.token })).body.job, null);
   assert.equal((await call(`/api/batch/job?id=${jobId}`, { token: owner.token })).body.job.status, "running");
+  assert.equal((await call(`/api/batch/job?id=${jobId}`, { token: owner.token, headers: { "X-Session-Proof": "" } })).status, 401);
+  assert.equal((await call("/api/batch/cancel", { method: "POST", token: owner.token, body: { id: jobId }, headers: { "X-Session-Proof": "" } })).status, 401);
   assert.equal((await call("/api/batch/apply", { method: "POST", token: owner.token, body: { plan: preview.body.plan, ...ownerCredentials } })).body.job.id, jobId);
   assert.equal(batchCalls, 1);
   assert.equal((await call("/api/account", { method: "DELETE", token: owner.token })).status, 409);
@@ -220,11 +250,12 @@ try {
   const beforeReconnectLogins = loginCalls;
   const reconnected = await call("/api/login", { method: "POST", body: { studentId: "httpowner1", password: "fixture-password" } });
   assert.equal(reconnected.status, 201);
+  assert.equal(reconnected.body.sessionProof, sessionProof(store.key, reconnected.headers["set-cookie"][0].split(";")[0].slice("overnight_session=".length)));
   assert.equal(loginCalls, beforeReconnectLogins + 1);
   const renewedCookie = reconnected.headers["set-cookie"][0];
   const renewedToken = renewedCookie.split(";")[0].slice("overnight_session=".length);
   assert.match(renewedCookie, /; Secure/);
-  assert.equal(store.find(renewedToken).id, owner.id);
+  assert.equal(store.find(renewedToken, { now: clock.getTime() }).id, owner.id);
   assert.equal(store.database.prepare("SELECT COUNT(*) AS count FROM profiles").get().count, profileCount);
   assert.equal((await call("/api/session", { token: owner.token })).body.connected, false);
   const recoveredHistory = (await call("/api/batch/history", { token: renewedToken })).body.jobs;

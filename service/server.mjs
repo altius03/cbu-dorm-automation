@@ -7,12 +7,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { MAX_BATCH_DATES, buildBatchDates, findConflict, groupBatchDates, localIsoDate, parseIsoDate, validatePeriod } from "../extension/core.mjs";
 import { PortalError, TukoreaPortal } from "./portal.mjs";
 import { HttpError } from "./errors.mjs";
+import { SESSION_TTL_MS, sessionProof } from "./crypto.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const sessionCookieName = "overnight_session";
 const mascotRoute = "/assets/cbu-sleeping-owl-v2.png";
 const knownRoutes = new Set([
-  "/", "/app.js", mascotRoute, "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect", "/api/claim",
+  "/", "/app.js", mascotRoute, "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect",
   "/api/logout", "/api/account", "/api/applications", "/api/check", "/api/apply", "/api/batch/job",
   "/api/batch/history", "/api/batch/preview", "/api/batch/apply", "/api/batch/cancel", "/api/batch/reconcile",
   "/api/cron/holidays",
@@ -97,6 +98,8 @@ export function createApplication({
   const rates = new Map();
   const requestProfiles = new WeakMap();
   let stopping = false;
+  let healthCheck;
+  let healthExpires = 0;
   const measure = async (phases, name, task) => {
     const started = performance.now();
     try { return await task(); }
@@ -108,13 +111,17 @@ export function createApplication({
       : [];
     return { today, maxSelectionDays: MAX_BATCH_DATES, holidays };
   };
-  const cookie = (token, maxAge = 31_536_000) => [
+  const cookie = (token, maxAge = SESSION_TTL_MS / 1000) => [
     sessionCookieName + "=" + token, "HttpOnly", "SameSite=Strict", "Path=/", "Max-Age=" + maxAge, secureCookie ? "Secure" : "",
   ].filter(Boolean).join("; ");
   const profileFrom = async request => {
     const cached = requestProfiles.get(request);
     if (cached) return cached;
-    const profile = await store.find(cookieValue(request), { now: now().getTime() });
+    const token = cookieValue(request);
+    const proof = request.headers["x-session-proof"];
+    if (!token || typeof proof !== "string" || !/^[A-Za-z0-9_-]{43}$/.test(proof)) return null;
+    if (!timingSafeEqual(Buffer.from(proof), Buffer.from(sessionProof(store.key, token)))) return null;
+    const profile = await store.find(token, { now: now().getTime() });
     if (profile) requestProfiles.set(request, profile);
     return profile;
   };
@@ -247,7 +254,12 @@ export function createApplication({
       return;
     }
     if (request.method === "GET" && url.pathname === "/api/health") {
-      await measure(phases, "databaseMs", () => store.health ? store.health() : store.database.prepare("SELECT 1").get());
+      // ponytail: 인스턴스별 30초 캐시. 분산 요청 제한이 필요하면 Vercel WAF에서 처리한다.
+      if (!healthCheck || now().getTime() >= healthExpires) {
+        healthExpires = now().getTime() + 30_000;
+        healthCheck = measure(phases, "databaseMs", () => store.health ? store.health() : store.database.prepare("SELECT 1").get());
+      }
+      await healthCheck;
       return sendJson(response, 200, { ok: true });
     }
     if (holidayCron) {
@@ -258,7 +270,7 @@ export function createApplication({
       }
       return sendJson(response, 200, await withBusy("holiday-sync", holidaySync));
     }
-    await limit(request, ["/api/login", "/api/register", "/api/reconnect", "/api/claim"].includes(url.pathname));
+    await limit(request, ["/api/login", "/api/register", "/api/reconnect"].includes(url.pathname));
     if (request.method === "GET" && url.pathname === "/api/session") {
       const today = localIsoDate(koreaNow(now()));
       return sendJson(response, 200, { connected: false, ...await currentContext(today, phases) });
@@ -308,13 +320,6 @@ export function createApplication({
       response.setHeader("Set-Cookie", cookie("", 0));
       return sendJson(response, 200, { connected: false });
     }
-    if (request.method === "POST" && url.pathname === "/api/claim") {
-      await readJson(request);
-      const profile = await store.claim(String(request.headers["x-claim-token"] || ""), { now: now().getTime() });
-      if (!profile) throw new HttpError(403, "이 계정 연결 링크는 유효하지 않거나 이미 사용되었습니다.");
-      response.setHeader("Set-Cookie", cookie(profile.token));
-      return sendJson(response, 200, { connected: true });
-    }
     if (request.method === "POST" && url.pathname === "/api/login") {
       const body = await readJson(request);
       const credentials = credentialsFrom(body);
@@ -344,7 +349,8 @@ export function createApplication({
       response.setHeader("Set-Cookie", cookie(login.profile.token));
       const today = localIsoDate(koreaNow(now()));
       return sendJson(response, 201, {
-        connected: true, ...await currentContext(today, phases), createdAt: login.profile.createdAt,
+        connected: true, sessionProof: sessionProof(store.key, login.profile.token),
+        ...await currentContext(today, phases), createdAt: login.profile.createdAt,
         applications: login.applications, applicationsError: login.applicationsError,
         jobs: await measure(phases, "databaseMs", () => store.jobs(login.profile.id)),
       });
@@ -370,7 +376,7 @@ export function createApplication({
         return existing;
       });
       response.setHeader("Set-Cookie", cookie(profile.token));
-      return sendJson(response, 201, { connected: true });
+      return sendJson(response, 201, { connected: true, sessionProof: sessionProof(store.key, profile.token) });
     }
     if (request.method === "POST" && url.pathname === "/api/batch/preview") {
       const profile = await requireProfile(request);

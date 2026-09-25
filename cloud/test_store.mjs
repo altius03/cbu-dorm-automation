@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
 
+import { SESSION_TTL_MS } from "../service/crypto.mjs";
 import { PostgresStore, internals } from "./store.mjs";
 
 const migrations = [
@@ -83,10 +84,14 @@ if (!url) {
     const columns = await sql.unsafe(`SELECT column_name FROM information_schema.columns WHERE table_schema = '${schema}' AND table_name = 'profiles'`);
     assert.equal(columns.some(row => row.column_name === "credential_ciphertext"), false);
 
+    const [beforeClaim] = await sql.unsafe(`SELECT updated_at FROM "${schema}".profiles WHERE id = $1`, [owner.id]);
     const claims = await Promise.all([store.claim(owner.token), second.claim(owner.token)]);
     assert.equal(claims.filter(Boolean).length, 1);
     const claimed = claims.find(Boolean);
     assert.equal(await store.find(owner.token), null);
+    const [afterClaim] = await sql.unsafe(`SELECT updated_at FROM "${schema}".profiles WHERE id = $1`, [owner.id]);
+    assert.equal(new Date(afterClaim.updated_at).getTime(), new Date(beforeClaim.updated_at).getTime());
+    assert.equal(await store.find(claimed.token, { now: new Date(beforeClaim.updated_at).getTime() + SESSION_TTL_MS + 1 }), null);
     const reconnected = await store.reconnect({ ...credentials, password: "replacement" });
     assert.equal(reconnected.id, owner.id);
     assert.equal(await store.find(claimed.token), null);

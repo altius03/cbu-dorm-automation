@@ -87,13 +87,13 @@ let unresolvedJob = false;
 let cancelRequested = false;
 let requestedJobId;
 let activeCredentials;
+let activeSessionProof;
 let pollDelay = 3000;
 const notifiedJobs = new Set();
 const pendingKey = "overnight_pending_job";
 try { requestedJobId = sessionStorage.getItem(pendingKey) || undefined; } catch {}
 const linkParameters = new URLSearchParams(location.hash.slice(1));
 const setupToken = linkParameters.get("setup") || "";
-const claimToken = linkParameters.get("claim") || "";
 if (location.hash) history.replaceState(null, "", location.pathname);
 
 function show(message, kind = "") {
@@ -234,6 +234,7 @@ function setConnected(connected) {
   if (!connected) {
     setPasswordVisible(false);
     activeCredentials = undefined;
+    activeSessionProof = undefined;
     clearTimeout(jobTimer);
     batchRunning = false;
     unresolvedJob = false;
@@ -416,7 +417,7 @@ async function api(path, options = {}) {
     response = await fetch(path, {
       ...requestOptions,
       signal: AbortSignal.timeout(timeout),
-      headers: { "Content-Type": "application/json", ...(requestOptions.headers || {}) },
+      headers: { "Content-Type": "application/json", ...(requestOptions.headers || {}), ...(activeSessionProof ? { "X-Session-Proof": activeSessionProof } : {}) },
     });
   } catch {
     throw new Error("서버 연결이 끊겼습니다. 처리 결과를 다시 확인해 주세요.");
@@ -637,6 +638,8 @@ loginForm.addEventListener("submit", async event => {
       headers: setupToken ? { "X-Setup-Token": setupToken } : {},
       body: JSON.stringify(credentials),
     });
+    if (typeof session.sessionProof !== "string") throw new Error("로그인 응답을 확인할 수 없습니다.");
+    activeSessionProof = session.sessionProof;
     activeCredentials = credentials;
     loginForm.reset();
     setPasswordVisible(false);
@@ -775,16 +778,11 @@ deleteButton.addEventListener("click", async () => {
   finally { setBusy(false); }
 });
 
-let claimError;
-try {
-  if (claimToken) await api("/api/claim", { method: "POST", headers: { "X-Claim-Token": claimToken }, body: "{}" });
-} catch (error) { claimError = error; }
 try {
   const session = await api("/api/session");
   configureSession(session);
   setConnected(session.connected);
   if (session.connected) await loadDashboard();
-  else if (claimError) showLogin(claimError.message, "error");
   else showLogin();
 } catch (error) {
   setConnected(false);

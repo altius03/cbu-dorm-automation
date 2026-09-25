@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import { SESSION_TTL_MS } from "./crypto.mjs";
 import { CredentialStore, internals } from "./store.mjs";
 
 const directory = mkdtempSync(join(tmpdir(), "tuk-store-test-"));
@@ -43,9 +44,12 @@ try {
   assert.deepEqual(Buffer.from(store.find(token).accountKey), store.accountKey(credentials));
   assert.equal(readFileSync(databasePath).includes(credentials.password), false);
 
-  const claimed = store.claim(token);
+  const expiresAt = Date.parse(timestamp) + SESSION_TTL_MS;
+  const claimed = store.claim(token, { now: expiresAt - 1000 });
   assert.equal(store.find(token), null);
   assert.ok(store.find(claimed.token));
+  assert.ok(store.find(claimed.token, { now: expiresAt - 1 }));
+  assert.equal(store.find(claimed.token, { now: expiresAt }), null);
   const reconnected = store.reconnect({ studentId: " FIXTURE123 ", password: "replacement" });
   assert.equal(reconnected.id, claimed.id);
   assert.equal(store.find(claimed.token), null);

@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { decodeKey, tokenHash } from "../service/crypto.mjs";
+import { decodeKey, SESSION_TTL_MS, tokenHash } from "../service/crypto.mjs";
 import { HttpError } from "../service/errors.mjs";
 import { MAX_BATCH_DATES, parseIsoDate, validateResidencySchedule } from "../extension/core.mjs";
 
@@ -84,14 +84,14 @@ export class PostgresStore {
 
   async find(token, { now = Date.now() } = {}) {
     if (!validToken(token) || !Number.isFinite(now)) return null;
-    const [row] = await this.q(`SELECT id, account_key, created_at FROM ${this.t.profiles} WHERE token_hash = $1 AND updated_at > $2::timestamptz - interval '365 days'`, [tokenHash(token), iso(now)]);
+    const [row] = await this.q(`SELECT id, account_key, created_at FROM ${this.t.profiles} WHERE token_hash = $1 AND updated_at > $2::timestamptz - $3 * interval '1 millisecond'`, [tokenHash(token), iso(now), SESSION_TTL_MS]);
     return row ? { id: row.id, accountKey: row.account_key, createdAt: iso(row.created_at) } : null;
   }
 
   async claim(token, { now = Date.now() } = {}) {
     if (!validToken(token) || !Number.isFinite(now)) return null;
     const replacement = randomBytes(32).toString("base64url");
-    const [row] = await this.q(`UPDATE ${this.t.profiles} SET token_hash = $1, updated_at = $2 WHERE token_hash = $3 AND updated_at > $2::timestamptz - interval '365 days' RETURNING id, created_at`, [tokenHash(replacement), iso(now), tokenHash(token)]);
+    const [row] = await this.q(`UPDATE ${this.t.profiles} SET token_hash = $1 WHERE token_hash = $2 AND updated_at > $3::timestamptz - $4 * interval '1 millisecond' RETURNING id, created_at`, [tokenHash(replacement), tokenHash(token), iso(now), SESSION_TTL_MS]);
     return row ? { id: row.id, token: replacement, createdAt: iso(row.created_at) } : null;
   }
 

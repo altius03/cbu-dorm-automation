@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { DatabaseSync } from "node:sqlite";
 import { DEFAULT_RESIDENCY_SCHEDULES, validateResidencySchedule } from "../extension/core.mjs";
-import { decodeKey, seal, tokenHash, unseal } from "./crypto.mjs";
+import { decodeKey, seal, SESSION_TTL_MS, tokenHash, unseal } from "./crypto.mjs";
 import { HttpError } from "./errors.mjs";
 
 function loadMasterKey(dataDirectory) {
@@ -153,7 +153,7 @@ export class CredentialStore {
       "INSERT INTO profiles (id, account_key, token_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
     );
     this.claimStatement = this.database.prepare(
-      "UPDATE profiles SET token_hash = ?, updated_at = ? WHERE id = ? AND token_hash = ?",
+      "UPDATE profiles SET token_hash = ? WHERE id = ? AND token_hash = ?",
     );
     this.deleteStatement = this.database.prepare("DELETE FROM profiles WHERE id = ?");
   }
@@ -184,7 +184,7 @@ export class CredentialStore {
     if (typeof token !== "string" || token.length < 32 || token.length > 128) return null;
     const row = this.findStatement.get(tokenHash(token));
     const updatedAt = row ? Date.parse(row.updated_at) : NaN;
-    if (!Number.isFinite(now) || !Number.isFinite(updatedAt) || now - updatedAt >= 31_536_000_000) return null;
+    if (!Number.isFinite(now) || !Number.isFinite(updatedAt) || now - updatedAt >= SESSION_TTL_MS) return null;
     return {
       id: row.id,
       accountKey: row.account_key,
@@ -197,7 +197,7 @@ export class CredentialStore {
     if (!profile) return null;
     const replacement = randomBytes(32).toString("base64url");
     const updated = this.claimStatement.run(
-      tokenHash(replacement), new Date(now).toISOString(), profile.id, tokenHash(token),
+      tokenHash(replacement), profile.id, tokenHash(token),
     );
     return updated.changes === 1 ? { id: profile.id, token: replacement, createdAt: profile.createdAt } : null;
   }

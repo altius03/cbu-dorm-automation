@@ -116,6 +116,22 @@ assert.doesNotMatch(script, /pageColor/);
 assert.doesNotMatch(script, /학교 포탈 계정으로 로그인해 주세요/);
 assert.match(script, /로그인 중…" : "로그인하고 시작하기/);
 assert.doesNotMatch(script, /innerHTML|eval\(/);
+assert.doesNotMatch(script, /(?:localStorage|sessionStorage)\.setItem\([^\n]*sessionProof/);
+
+const apiSource = script.slice(script.indexOf("async function api("), script.indexOf("function configureSession("));
+const sentHeaders = [];
+const apiContext = {
+  AbortSignal, activeSessionProof: "fixture-proof",
+  fetch: async (_path, options) => {
+    sentHeaders.push(options.headers);
+    return { ok: true, headers: { get: () => null }, json: async () => ({}) };
+  },
+};
+await runInNewContext(`${apiSource}\napi("/api/batch/history")`, apiContext);
+assert.equal(sentHeaders[0]["X-Session-Proof"], "fixture-proof");
+apiContext.activeSessionProof = undefined;
+await runInNewContext(`${apiSource}\napi("/api/batch/history")`, apiContext);
+assert.equal(sentHeaders[1]["X-Session-Proof"], undefined);
 
 const selectionSource = script.slice(script.indexOf("function dateAt("), script.indexOf("function jobMarks("));
 function selectedFor(patterns, { today = "2026-09-22", holidays = [], applications = [], weekdays = [], range = "7" } = {}) {

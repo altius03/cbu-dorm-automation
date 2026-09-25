@@ -9,13 +9,15 @@ import { validatePeriod } from "../extension/core.mjs";
 import { buildRequest, internals as portalInternals, parseResponse, TukoreaPortal } from "./portal.mjs";
 import { CredentialStore } from "./store.mjs";
 import { batchDatesFrom, createApplication, koreaNow } from "./server.mjs";
+import { sessionProof } from "./crypto.mjs";
 
 // 실제 네트워크 없이 운영 HTTP 핸들러를 격리 DB에 연결한다.
+let requestKey;
 async function call(app, path, { method = "POST", token, body = {}, headers = {}, raw, socket = { localPort: 8787, remoteAddress: "127.0.0.1" } } = {}) {
   const request = Readable.from([Buffer.from(raw ?? JSON.stringify(body))]);
   request.url = path;
   request.method = method;
-  request.headers = { host: "127.0.0.1:8787", "content-type": "application/json", ...(token ? { cookie: `overnight_session=${token}` } : {}), ...headers };
+  request.headers = { host: "127.0.0.1:8787", "content-type": "application/json", ...(token ? { cookie: `overnight_session=${token}`, "x-session-proof": sessionProof(requestKey, token) } : {}), ...headers };
   request.socket = socket;
   const response = {
     statusCode: 200, headers: {}, headersSent: false,
@@ -108,6 +110,7 @@ try {
   await assert.rejects(portal.applyMany(["20990101", "20990101"]), /겹치는/);
 
   const httpStore = new CredentialStore(join(directory, "http"));
+  requestKey = httpStore.key;
   httpStore.holidays = () => [{ date: "2026-10-03", name: "개천절", source: "fixture", updatedAt: "2026-09-19T00:00:00.000Z" }];
   const ownerCredentials = { studentId: "owner0001", password: "fake-password" };
   const otherCredentials = { studentId: "other0002", password: "fake-password" };
@@ -202,8 +205,9 @@ try {
   assert.equal((await call(createApplication(registrationOptions), "/api/register", registrationRequest)).statusCode, 410);
   assert.equal(loginCalls, 1);
   const limited = createApplication({ store: httpStore, logger: () => {} });
-  for (let index = 0; index < 10; index++) assert.equal((await call(limited, "/api/claim")).statusCode, 403);
-  assert.equal((await call(limited, "/api/claim")).statusCode, 429);
+  for (let index = 0; index < 10; index++) assert.equal((await call(limited, "/api/login")).statusCode, 400);
+  assert.equal((await call(limited, "/api/login")).statusCode, 429);
+  assert.equal((await call(limited, "/api/claim", { token: owner.token, headers: { "x-claim-token": owner.token } })).statusCode, 404);
   assert.equal(logs.some(entry => /fixture-secret-password|fixture-setup-token|fake-password/.test(JSON.stringify(entry))), false);
 
   httpStore.createJob("interrupted-fixture", owner.id, ["20260921"]);

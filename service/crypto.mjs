@@ -1,4 +1,6 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes } from "node:crypto";
+
+export const SESSION_TTL_MS = 8 * 60 * 60 * 1000;
 
 export function decodeKey(value) {
   const encoded = typeof value === "string" ? value.trim() : "";
@@ -11,6 +13,10 @@ export function decodeKey(value) {
 
 export function tokenHash(token) {
   return createHash("sha256").update(token).digest();
+}
+
+export function sessionProof(key, token) {
+  return createHmac("sha256", key).update("overnight-page-proof-v1\0").update(token).digest("base64url");
 }
 
 export function seal(credentials, profileId, key) {
