@@ -5,6 +5,7 @@ import postgres from "postgres";
 
 import { SESSION_TTL_MS } from "../service/crypto.mjs";
 import { PostgresStore, internals } from "./store.mjs";
+import { createOperations, reportWindow } from "./operations.mjs";
 
 const migrations = [
   "./supabase/migrations/20260919095949_init_cloud_schema.sql",
@@ -12,6 +13,7 @@ const migrations = [
   "./supabase/migrations/20260919142047_allow_passwordless_profiles.sql",
   "./supabase/migrations/20260919142049_drop_stored_credentials.sql",
   "./supabase/migrations/20260919144058_add_public_holidays.sql",
+  "./supabase/migrations/20261006105453_add_operations_reporting.sql",
 ];
 const migrationSource = () => migrations.map(path => readFileSync(new URL(path, import.meta.url), "utf8"))
   .join("\n").replace(/^(?:BEGIN|COMMIT);$/gm, "");
@@ -117,7 +119,7 @@ if (!url) {
       { date: "2026-10-03", name: "중복", source: "fixture" },
     ]), /형식/);
     const policies = await sql.unsafe(`SELECT c.relrowsecurity, c.relforcerowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = '${schema}' AND c.relkind = 'r'`);
-    assert.equal(policies.length, 8);
+    assert.equal(policies.length, 10);
     assert.ok(policies.every(row => row.relrowsecurity && row.relforcerowsecurity));
     await assert.rejects(sql.begin(async tx => {
       await tx.unsafe(`SET LOCAL ROLE "${deniedRole}"`);
@@ -135,10 +137,47 @@ if (!url) {
     release();
     await held;
 
+    await sql.unsafe(`UPDATE "${schema}".operations_runs SET started_at = '2026-10-01T00:00:00Z' WHERE kind = 'setup'`);
+    const activityCredentials = { studentId: "metrics123", password: "fixture-only" };
+    const activeUser = await store.create(activityCredentials, "", { now: Date.parse("2026-10-04T14:00:00Z") });
+    await Promise.all([store, second].map(client => client.reconnect(activityCredentials, { now: Date.parse("2026-10-05T14:59:59Z") })));
+    await store.reconnect(activityCredentials, { now: Date.parse("2026-10-05T15:00:00Z") });
+    await store.create({ studentId: "metrics456", password: "fixture-only" }, "", { now: Date.parse("2026-10-05T14:00:00Z") });
+    const activityRows = await sql.unsafe(`SELECT activity_date::text FROM "${schema}".daily_logins WHERE account_key = $1 ORDER BY activity_date`, [store.accountKey(activityCredentials)]);
+    assert.deepEqual(activityRows.map(row => row.activity_date), ["2026-10-04", "2026-10-05", "2026-10-06"]);
+    const metricJob = randomUUID();
+    await store.createJob(metricJob, activeUser.id, ["20990101", "20990103"]);
+    await store.updateJob(metricJob, "done", { outcome: "partial", results: [{ date: "20990101", status: "saved" }, { date: "20990103", status: "unknown" }] });
+    await sql.unsafe(`UPDATE "${schema}".batch_jobs SET created_at = '2026-10-05T14:00:00Z' WHERE id = $1`, [metricJob]);
+    const reportNow = Date.parse("2026-10-05T15:10:00Z");
+    for (const date of ["2026-10-04T18:00:00Z", "2026-10-05T00:00:00Z", "2026-10-05T06:00:00Z", "2026-10-05T12:00:00Z"]) {
+      await store.startOperation("health", date, Date.parse(date));
+      await store.finishOperation("health", date, "success", {}, Date.parse(date) + 100);
+    }
+    const stats = await store.operationsSnapshot(reportWindow(reportNow), reportNow);
+    assert.deepEqual([stats.users.active, stats.users.previous, stats.users.new, stats.users.total], [2, 1, 1, 2]);
+    assert.deepEqual([stats.jobs.total, stats.jobs.partial, stats.jobs.failed], [1, 1, 0]);
+    assert.deepEqual(stats.periods, { saved: 1, unknown: 1 });
+    assert.equal(stats.recentRuns.length, 4);
+    assert.equal(stats.database.writable, true);
+    let dmCount = 0;
+    const reportOptions = { store, origin: "https://fixture.example", now: () => reportNow,
+      fetchImpl: async url => url.endsWith("/api/health") ? Response.json({ ok: true }) : new Response("fixture", { headers: { "Content-Type": "text/html" } }),
+      send: async (_message, { beforeSend }) => { await beforeSend(); dmCount++; return { ts: "fixture.1", channel: "D123" }; },
+    };
+    await Promise.all([createOperations(reportOptions).report(), createOperations({ ...reportOptions, store: second }).report()]);
+    await createOperations(reportOptions).report();
+    assert.equal(dmCount, 1);
+    const readOnlySql = postgres(url, { max: 1, prepare: false, onnotice: () => {}, connection: { role: appRole, default_transaction_read_only: "on" } });
+    try { await assert.rejects(new PostgresStore({ sql: readOnlySql, key, schema }).health(), error => error.status === 503); }
+    finally { await readOnlySql.end({ timeout: 5 }); }
+    await store.delete(activeUser.id);
+    assert.equal((await sql.unsafe(`SELECT 1 FROM "${schema}".daily_logins WHERE account_key = $1`, [store.accountKey(activityCredentials)])).length, 0);
+
     assert.equal(await store.delete(owner.id), true);
     assert.deepEqual(await store.jobs(owner.id), []);
     await restrictedMigration(sql, url);
-    console.log("cloud store checks passed: passwordless profiles, private RLS schema, holidays, recovery, atomic rate and locks");
+    console.log("cloud store checks passed: private RLS, KST unique logins, read-only health, result counts, atomic single report, cleanup, migration permissions and existing session/job behavior");
   } finally {
     await appSql.end({ timeout: 5 });
     await sql.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);

@@ -4,6 +4,7 @@ import script from "../service/public/app.js" with { type: "text" };
 import { createApplication } from "../service/server.mjs";
 import { syncPublicHolidays } from "./holidays.mjs";
 import { getStore } from "./runtime.mjs";
+import { createOperations } from "./operations.mjs";
 
 let app;
 export default async function handler(request, response) {
@@ -12,6 +13,7 @@ export default async function handler(request, response) {
       const store = getStore();
       const publicOrigin = process.env.OVERNIGHT_PUBLIC_ORIGIN || "";
       if (process.env.VERCEL && !publicOrigin) throw new Error("Missing origin");
+      const holidaySync = () => syncPublicHolidays(store, { serviceKey: process.env.DATA_GO_KR_SERVICE_KEY || "" });
       app = createApplication({
         store, publicOrigin, secureCookie: true,
         // Nitro dev proxies through another socket; trust the configured port, never incoming Host.
@@ -19,7 +21,9 @@ export default async function handler(request, response) {
         publicRegistration: process.env.OVERNIGHT_PUBLIC_REGISTRATION === "1",
         setupToken: process.env.OVERNIGHT_SETUP_TOKEN || "",
         cronSecret: process.env.CRON_SECRET || "",
-        holidaySync: () => syncPublicHolidays(store, { serviceKey: process.env.DATA_GO_KR_SERVICE_KEY || "" }),
+        holidaySync,
+        operations: createOperations({ store, origin: publicOrigin, holidaySync,
+          token: process.env.OVERNIGHT_SLACK_BOT_TOKEN || "", userId: process.env.OVERNIGHT_SLACK_USER_ID || "" }),
         page: Buffer.from(html),
         script: Buffer.from(script),
         clientAddress: req => {

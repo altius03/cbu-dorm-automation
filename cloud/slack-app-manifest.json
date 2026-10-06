@@ -1,0 +1,22 @@
+{
+  "display_information": {
+    "name": "생활관 운영 리포트",
+    "description": "생활관 서비스의 일일 이용량과 운영 상태를 관리자 DM으로 전송합니다."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "cbudorm-report",
+      "always_online": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["chat:write", "im:write"]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

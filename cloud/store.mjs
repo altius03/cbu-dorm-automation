@@ -44,7 +44,7 @@ export class PostgresStore {
     this.sql = sql;
     this.key = Buffer.isBuffer(key) ? decodeKey(key.toString("base64")) : decodeKey(key);
     this.schema = schema;
-    this.t = Object.fromEntries(["key_guard", "profiles", "used_setup_tokens", "batch_jobs", "rate_limits", "busy_locks", "residency_schedules", "public_holidays"].map(name => [name, `"${schema}"."${name}"`]));
+    this.t = Object.fromEntries(["key_guard", "profiles", "used_setup_tokens", "batch_jobs", "rate_limits", "busy_locks", "residency_schedules", "public_holidays", "daily_logins", "operations_runs"].map(name => [name, `"${schema}"."${name}"`]));
   }
 
   hash(namespace, value) { return createHmac("sha256", this.key).update(namespace + "\0" + value).digest(); }
@@ -59,21 +59,31 @@ export class PostgresStore {
       }
       const [guard] = await tx.unsafe(`SELECT fingerprint FROM ${this.t.key_guard} WHERE id = 1`);
       if (!guard || guard.fingerprint.length !== fingerprint.length || !timingSafeEqual(guard.fingerprint, fingerprint)) throw new Error("저장된 계정의 원래 서버 키가 필요합니다.");
+      if (!(await tx.unsafe(`SELECT 1 FROM ${this.t.operations_runs} WHERE kind = 'setup' AND run_key = 'daily-logins'`)).length) {
+        await tx.unsafe(`INSERT INTO ${this.t.operations_runs}(kind, run_key, status, finished_at)
+          VALUES ('setup', 'daily-logins', 'success', clock_timestamp()) ON CONFLICT DO NOTHING`);
+      }
     }).catch(error => { this.verified = null; throw error; });
     return this.verified;
   }
 
   async q(statement, values = [], tx = this.sql) { await this.ready(); return tx.unsafe(statement, values); }
   async transaction(task) { await this.ready(); return this.sql.begin(task); }
-  async health() { await this.q("SELECT 1"); return true; }
+  async health() {
+    const [row] = await this.q("SELECT current_setting('transaction_read_only') AS read_only");
+    if (row.read_only !== "off") throw new HttpError(503, "데이터베이스가 읽기 전용 상태입니다.");
+    return true;
+  }
   async setupUsed(token) { return (await this.q(`SELECT 1 FROM ${this.t.used_setup_tokens} WHERE token_hash = $1`, [tokenHash(token)])).length > 0; }
 
-  async create(credentials, setupToken = "") {
+  async create(credentials, setupToken = "", { now = Date.now() } = {}) {
     const id = randomUUID(), token = randomBytes(32).toString("base64url");
     try {
       return await this.transaction(async tx => {
         if (setupToken) await this.q(`INSERT INTO ${this.t.used_setup_tokens}(token_hash) VALUES ($1)`, [tokenHash(setupToken)], tx);
-        const [row] = await this.q(`INSERT INTO ${this.t.profiles}(id, account_key, token_hash) VALUES ($1, $2, $3) RETURNING created_at`, [id, this.accountKey(credentials), tokenHash(token)], tx);
+        const accountKey = this.accountKey(credentials);
+        const [row] = await this.q(`INSERT INTO ${this.t.profiles}(id, account_key, token_hash, created_at, updated_at) VALUES ($1, $2, $3, $4, $4) RETURNING created_at`, [id, accountKey, tokenHash(token), iso(now)], tx);
+        await this.recordLogin(accountKey, now, tx);
         return { id, token, createdAt: iso(row.created_at) };
       });
     } catch (error) {
@@ -102,6 +112,7 @@ export class PostgresStore {
       if (!row) return null;
       const token = randomBytes(32).toString("base64url");
       await this.q(`UPDATE ${this.t.profiles} SET token_hash = $1, updated_at = $2 WHERE id = $3`, [tokenHash(token), iso(now), row.id], tx);
+      await this.recordLogin(this.accountKey(credentials), now, tx);
       return { id: row.id, token, createdAt: iso(row.created_at) };
     });
   }
@@ -268,6 +279,80 @@ export class PostgresStore {
     if (!rows.length) throw new HttpError(409, "이 계정의 요청을 처리 중입니다. 완료 후 다시 시도해 주세요.");
     try { return await task(); }
     finally { await this.q(`DELETE FROM ${this.t.busy_locks} WHERE key_hash = $1 AND owner = $2`, [hash, owner]); }
+  }
+
+  async recordLogin(accountKey, now, tx = this.sql) {
+    await this.q(`INSERT INTO ${this.t.daily_logins}(activity_date, account_key)
+      VALUES (($1::timestamptz AT TIME ZONE 'Asia/Seoul')::date, $2) ON CONFLICT DO NOTHING`, [iso(now), accountKey], tx);
+  }
+
+  async startOperation(kind, runKey, now = Date.now()) {
+    const [row] = await this.q(`INSERT INTO ${this.t.operations_runs} AS current(kind, run_key, status, started_at)
+      VALUES ($1, $2, 'running', $3)
+      ON CONFLICT (kind, run_key) DO UPDATE SET status = 'running', attempts = current.attempts + 1,
+        started_at = EXCLUDED.started_at, finished_at = NULL, detail = '{}'::jsonb
+      WHERE current.status = 'failed' OR (current.status = 'running' AND current.started_at < $3::timestamptz - interval '6 minutes')
+      RETURNING *`, [kind, runKey, iso(now)]);
+    return row || null;
+  }
+
+  async finishOperation(kind, runKey, status, detail = {}, now = Date.now()) {
+    await this.q(`UPDATE ${this.t.operations_runs} SET status = $3, detail = $4::jsonb, finished_at = $5
+      WHERE kind = $1 AND run_key = $2`, [kind, runKey, status, detail, iso(now)]);
+  }
+
+  async cleanupOperations(now = Date.now()) {
+    await this.transaction(async tx => {
+      await this.q(`DELETE FROM ${this.t.daily_logins} WHERE activity_date < ($1::timestamptz AT TIME ZONE 'Asia/Seoul')::date - 90`, [iso(now)], tx);
+      await this.q(`DELETE FROM ${this.t.operations_runs} WHERE kind <> 'setup' AND started_at < $1::timestamptz - interval '90 days'`, [iso(now)], tx);
+      for (const table of [this.t.rate_limits, this.t.busy_locks]) {
+        await this.q(`DELETE FROM ${table} WHERE expires_at < $1::timestamptz - interval '1 day'`, [iso(now)], tx);
+      }
+    });
+  }
+
+  async operationsSnapshot({ date, start, end, previousStart }, now = Date.now()) {
+    const number = value => Number(value || 0);
+    return this.transaction(async tx => {
+      await tx.unsafe("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
+      const [users] = await this.q(`SELECT
+        (SELECT count(*) FROM ${this.t.daily_logins} WHERE activity_date = $1::date) AS active,
+        (SELECT count(*) FROM ${this.t.daily_logins} WHERE activity_date = $1::date - 1) AS previous,
+        count(*) FILTER (WHERE created_at >= $2 AND created_at < $3) AS new,
+        count(*) FILTER (WHERE created_at < $3) AS total,
+        (SELECT started_at FROM ${this.t.operations_runs} WHERE kind = 'setup' AND run_key = 'daily-logins') AS tracking_started
+        FROM ${this.t.profiles}`, [date, start, end], tx);
+      const jobs = await this.q(`SELECT status, result->>'outcome' AS outcome, count(*) AS count
+        FROM ${this.t.batch_jobs} WHERE created_at >= $1 AND created_at < $2 GROUP BY status, result->>'outcome'`, [start, end], tx);
+      const periods = await this.q(`SELECT item->>'status' AS status, count(*) AS count
+        FROM ${this.t.batch_jobs} CROSS JOIN LATERAL jsonb_array_elements(result->'results') item
+        WHERE created_at >= $1 AND created_at < $2 GROUP BY item->>'status'`, [start, end], tx);
+      const [previousJobs] = await this.q(`SELECT count(*) AS count FROM ${this.t.batch_jobs} WHERE created_at >= $1 AND created_at < $2`, [previousStart, start], tx);
+      const [database] = await this.q("SELECT pg_database_size(current_database()) AS bytes, current_setting('default_transaction_read_only') AS read_only", [], tx);
+      const recentRuns = await this.q(`SELECT kind, status, attempts, started_at, finished_at FROM ${this.t.operations_runs}
+        WHERE kind IN ('health', 'holidays') AND started_at >= $1::timestamptz - interval '24 hours' AND started_at < $1
+        ORDER BY started_at`, [iso(now)], tx);
+      const latestRuns = await this.q(`SELECT DISTINCT ON (kind) kind, status, attempts, started_at, finished_at FROM ${this.t.operations_runs}
+        WHERE kind IN ('health', 'holidays', 'report') AND NOT (kind = 'report' AND run_key = $1)
+        ORDER BY kind, started_at DESC`, [date], tx);
+      const [lastHoliday] = await this.q(`SELECT max(updated_at) AS updated_at FROM ${this.t.public_holidays}`, [], tx);
+      const counts = { done: 0, partial: 0, failed: 0, interrupted: 0, running: 0 };
+      for (const row of jobs) {
+        const status = row.status === 'done' && row.outcome === 'partial' ? 'partial'
+          : row.status === 'done' && row.outcome === 'cancelled' ? 'interrupted' : row.status;
+        counts[status] += number(row.count);
+      }
+      const trackingStarted = users.tracking_started ? iso(users.tracking_started) : null;
+      const active = trackingStarted && trackingStarted < end ? number(users.active) : null;
+      return {
+        date, users: { active, previous: trackingStarted && trackingStarted <= previousStart ? number(users.previous) : null,
+          new: number(users.new), total: number(users.total), trackingStarted, partial: Boolean(trackingStarted && trackingStarted > start && trackingStarted < end) },
+        jobs: { total: jobs.reduce((sum, row) => sum + number(row.count), 0), previous: number(previousJobs.count), ...counts },
+        periods: Object.fromEntries(periods.map(row => [row.status, number(row.count)])),
+        database: { bytes: number(database.bytes), writable: database.read_only === 'off' },
+        recentRuns, latestRuns, holidayUpdatedAt: lastHoliday.updated_at ? iso(lastHoliday.updated_at) : null,
+      };
+    });
   }
 
   async close() { await this.sql.end({ timeout: 5 }); }

@@ -5,5 +5,12 @@
   "buildCommand": "npm run build",
   "regions": ["icn1"],
   "fluid": true,
-  "crons": [{ "path": "/api/cron/holidays", "schedule": "0 18 * * *" }]
+  "crons": [
+    { "path": "/api/cron/health", "schedule": "0 0 * * *" },
+    { "path": "/api/cron/health", "schedule": "0 6 * * *" },
+    { "path": "/api/cron/health", "schedule": "0 12 * * *" },
+    { "path": "/api/cron/health", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/holidays", "schedule": "0 18 * * *" },
+    { "path": "/api/cron/report", "schedule": "0 15 * * *" }
+  ]
 }

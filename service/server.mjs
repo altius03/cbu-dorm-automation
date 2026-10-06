@@ -16,7 +16,7 @@ const knownRoutes = new Set([
   "/", "/app.js", mascotRoute, "/api/health", "/api/session", "/api/login", "/api/register", "/api/reconnect",
   "/api/logout", "/api/account", "/api/applications", "/api/check", "/api/apply", "/api/batch/job",
   "/api/batch/history", "/api/batch/preview", "/api/batch/apply", "/api/batch/cancel", "/api/batch/reconcile",
-  "/api/cron/holidays",
+  "/api/cron/holidays", "/api/cron/health", "/api/cron/report",
 ]);
 
 function sendJson(response, status, value) {
@@ -81,7 +81,7 @@ export function createApplication({
   setupToken = "", publicOrigin = "", secureCookie = false, now = () => new Date(),
   logger = entry => console.log(JSON.stringify(entry)),
   publicRegistration = false,
-  holidaySync = null, cronSecret = "",
+  holidaySync = null, operations = null, cronSecret = "",
   clientAddress = request => request.socket.remoteAddress,
   localPort,
   page = readFileSync(join(here, "public", "index.html")),
@@ -238,8 +238,8 @@ export function createApplication({
 
   async function route(request, response, phases) {
     const url = new URL(request.url, "http://localhost");
-    const holidayCron = request.method === "GET" && url.pathname === "/api/cron/holidays";
-    const origin = holidayCron ? "" : guard(request, request.method === "GET" && url.pathname === "/");
+    const cronKind = request.method === "GET" && { "/api/cron/holidays": "holidays", "/api/cron/health": "health", "/api/cron/report": "report" }[url.pathname];
+    const origin = cronKind ? "" : guard(request, request.method === "GET" && url.pathname === "/");
     if (stopping && request.method !== "GET") throw new HttpError(503, "서버가 재시작 중입니다. 잠시 후 다시 시도해 주세요.");
     if (request.method === "GET" && ["/", "/app.js"].includes(url.pathname)) {
       const body = url.pathname === "/" ? page : script;
@@ -262,12 +262,14 @@ export function createApplication({
       await healthCheck;
       return sendJson(response, 200, { ok: true });
     }
-    if (holidayCron) {
+    if (cronKind) {
       const supplied = Buffer.from(String(request.headers.authorization || ""));
       const expected = Buffer.from(`Bearer ${cronSecret}`);
-      if (!holidaySync || !cronSecret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
-        throw new HttpError(401, "공휴일 동기화 요청을 인증할 수 없습니다.");
+      if (!cronSecret || supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+        throw new HttpError(401, "정기 작업 요청을 인증할 수 없습니다.");
       }
+      if (operations?.[cronKind]) return sendJson(response, 200, await operations[cronKind]());
+      if (cronKind !== "holidays" || !holidaySync) throw new HttpError(503, "정기 작업 설정을 확인해 주세요.");
       return sendJson(response, 200, await withBusy("holiday-sync", holidaySync));
     }
     await limit(request, ["/api/login", "/api/register", "/api/reconnect"].includes(url.pathname));
@@ -336,7 +338,7 @@ export function createApplication({
           const validSetup = setupToken && supplied.length === expected.length && timingSafeEqual(supplied, expected);
           if (!publicRegistration && !validSetup) throw new HttpError(403, "현재는 새 사용자 로그인을 받을 수 없습니다.");
           if (validSetup && await store.setupUsed(setupToken)) throw new HttpError(410, "이 로그인 링크는 이미 사용되었습니다.");
-          profile = await measure(phases, "databaseMs", () => store.create(credentials, validSetup ? setupToken : ""));
+          profile = await measure(phases, "databaseMs", () => store.create(credentials, validSetup ? setupToken : "", { now: now().getTime() }));
         }
         try { return { profile, applications: await measure(phases, "schoolApplicationsMs", () => portal.applications()) }; }
         catch (error) {
@@ -370,7 +372,7 @@ export function createApplication({
       const profile = await withBusy(registrationKey, async () => {
         if (registrationToken && await store.setupUsed(registrationToken)) throw new HttpError(410, "이 계정 연결 링크는 이미 사용되었습니다. 저장된 계정 다시 연결을 이용해 주세요.");
         await measure(phases, "schoolLoginMs", () => portalFactory(credentials).login());
-        if (!reconnect) return store.create(credentials, registrationToken);
+        if (!reconnect) return store.create(credentials, registrationToken, { now: now().getTime() });
         const existing = await store.reconnect(credentials, { now: now().getTime() });
         if (!existing) throw new HttpError(403, "다시 연결할 계정이 없습니다. 최초 계정 연결 링크를 이용해 주세요.");
         return existing;
